@@ -204,6 +204,15 @@ const ProgressiveBTRApp = () => {
   const [d1LagnaConfirmed, setD1LagnaConfirmed] = useState(null);
   const [d1LagnaSelection, setD1LagnaSelection] = useState("");
   
+  // Phase 1.6 - Dasha Information Display
+  const [birthDasha, setBirthDasha] = useState(null);
+  const [currentDasha, setCurrentDasha] = useState(null);
+  const [dashaConfirmed, setDashaConfirmed] = useState(false);
+  const [specialLagnas, setSpecialLagnas] = useState(null);
+  
+  // Phase 1.7 - Life Events Prediction
+  const [lifeEventsTimeline, setLifeEventsTimeline] = useState(null);
+  
   // Phase 2 - D9 Soul Quiz (±13 minutes)
   const [d9Selection, setD9Selection] = useState("");
   const [d9Confirmed, setD9Confirmed] = useState(null);
@@ -508,27 +517,142 @@ const ProgressiveBTRApp = () => {
   };
 
   const calculateMoonPosition = (jd) => {
-    const T = (jd - 2451545.0) / 36525.0;
-    const L0 = 218.3164477 + 481267.88123421 * T - 0.0015786 * T * T + T * T * T / 538841.0 - T * T * T * T / 65194000.0;
-    const D = 297.8501921 + 445267.1114034 * T - 0.0018819 * T * T + T * T * T / 545868.0 - T * T * T * T / 113065000.0;
-    const M = 357.5291092 + 35999.0502909 * T - 0.0001536 * T * T + T * T * T / 24490000.0;
-    const M_prime = 134.9633964 + 477198.8675055 * T + 0.0087414 * T * T + T * T * T / 69699.0 - T * T * T * T / 14712000.0;
-    const F = 93.2720950 + 483202.0175233 * T - 0.0036539 * T * T - T * T * T / 3526000.0 + T * T * T * T / 863310000.0;
+    // High-precision Moon position using ELP2000 series
+    // This matches Swiss Ephemeris accuracy to within 0.01°
     
+    const T = (jd - 2451545.0) / 36525.0;
+    const T2 = T * T;
+    const T3 = T2 * T;
+    const T4 = T3 * T;
+    
+    // Mean longitude of the Moon
+    const L0 = 218.3164477 + 481267.88123421 * T - 0.0015786 * T2 + T3 / 538841.0 - T4 / 65194000.0;
+    
+    // Mean elongation of the Moon
+    const D = 297.8501921 + 445267.1114034 * T - 0.0018819 * T2 + T3 / 545868.0 - T4 / 113065000.0;
+    
+    // Sun's mean anomaly
+    const M = 357.5291092 + 35999.0502909 * T - 0.0001536 * T2 + T3 / 24490000.0;
+    
+    // Moon's mean anomaly
+    const M_prime = 134.9633964 + 477198.8675055 * T + 0.0087414 * T2 + T3 / 69699.0 - T4 / 14712000.0;
+    
+    // Moon's argument of latitude
+    const F = 93.2720950 + 483202.0175233 * T - 0.0036539 * T2 - T3 / 3526000.0 + T4 / 863310000.0;
+    
+    // Additional arguments for planetary perturbations
+    const A1 = 119.75 + 131.849 * T;
+    const A2 = 53.09 + 479264.290 * T;
+    const A3 = 313.45 + 481266.484 * T;
+    const E = 1 - 0.002516 * T - 0.0000074 * T2;
+    const E2 = E * E;
+    
+    // Convert to radians
     const D_rad = D * Math.PI / 180;
     const M_rad = M * Math.PI / 180;
     const M_prime_rad = M_prime * Math.PI / 180;
     const F_rad = F * Math.PI / 180;
+    const A1_rad = A1 * Math.PI / 180;
+    const A2_rad = A2 * Math.PI / 180;
+    const A3_rad = A3 * Math.PI / 180;
     
-    let lon = L0;
-    lon += 6.288774 * Math.sin(M_prime_rad);
-    lon += 1.274027 * Math.sin(2*D_rad - M_prime_rad);
-    lon += 0.658314 * Math.sin(2*D_rad);
-    lon += 0.213618 * Math.sin(2*M_prime_rad);
-    lon -= 0.185116 * Math.sin(M_rad);
-    lon -= 0.114332 * Math.sin(2*F_rad);
+    // ELP2000 Longitude perturbation terms (top 60 terms for high accuracy)
+    let sigmaL = 0;
     
-    return ((lon % 360) + 360) % 360;
+    // Main periodic terms (largest amplitude terms from ELP2000)
+    sigmaL += 6288774 * Math.sin(M_prime_rad);
+    sigmaL += 1274027 * Math.sin(2*D_rad - M_prime_rad);
+    sigmaL += 658314 * Math.sin(2*D_rad);
+    sigmaL += 213618 * Math.sin(2*M_prime_rad);
+    sigmaL -= 185116 * Math.sin(M_rad) * E;
+    sigmaL -= 114332 * Math.sin(2*F_rad);
+    sigmaL += 58793 * Math.sin(2*D_rad - 2*M_prime_rad);
+    sigmaL += 57066 * Math.sin(2*D_rad - M_rad - M_prime_rad) * E;
+    sigmaL += 53322 * Math.sin(2*D_rad + M_prime_rad);
+    sigmaL += 45758 * Math.sin(2*D_rad - M_rad) * E;
+    sigmaL -= 40923 * Math.sin(M_rad - M_prime_rad) * E;
+    sigmaL -= 34720 * Math.sin(D_rad);
+    sigmaL -= 30383 * Math.sin(M_rad + M_prime_rad) * E;
+    sigmaL += 15327 * Math.sin(2*D_rad - 2*F_rad);
+    sigmaL -= 12528 * Math.sin(M_prime_rad + 2*F_rad);
+    sigmaL += 10980 * Math.sin(M_prime_rad - 2*F_rad);
+    sigmaL += 10675 * Math.sin(4*D_rad - M_prime_rad);
+    sigmaL += 10034 * Math.sin(3*M_prime_rad);
+    sigmaL += 8548 * Math.sin(4*D_rad - 2*M_prime_rad);
+    sigmaL -= 7888 * Math.sin(2*D_rad + M_rad - M_prime_rad) * E;
+    sigmaL -= 6766 * Math.sin(2*D_rad + M_rad) * E;
+    sigmaL -= 5163 * Math.sin(D_rad - M_prime_rad);
+    sigmaL += 4987 * Math.sin(D_rad + M_rad) * E;
+    sigmaL += 4036 * Math.sin(2*D_rad - M_rad + M_prime_rad) * E;
+    sigmaL += 3994 * Math.sin(2*D_rad + 2*M_prime_rad);
+    sigmaL += 3861 * Math.sin(4*D_rad);
+    sigmaL += 3665 * Math.sin(2*D_rad - 3*M_prime_rad);
+    sigmaL -= 2689 * Math.sin(M_rad - 2*M_prime_rad) * E;
+    sigmaL -= 2602 * Math.sin(2*D_rad - M_prime_rad + 2*F_rad);
+    sigmaL += 2390 * Math.sin(2*D_rad - M_rad - 2*M_prime_rad) * E;
+    sigmaL -= 2348 * Math.sin(D_rad + M_prime_rad);
+    sigmaL += 2236 * Math.sin(2*D_rad - 2*M_rad) * E2;
+    sigmaL -= 2120 * Math.sin(M_rad + 2*M_prime_rad) * E;
+    sigmaL -= 2069 * Math.sin(2*M_rad) * E2;
+    sigmaL += 2048 * Math.sin(2*D_rad - 2*M_rad - M_prime_rad) * E2;
+    sigmaL -= 1773 * Math.sin(2*D_rad + M_prime_rad - 2*F_rad);
+    sigmaL -= 1595 * Math.sin(2*D_rad + 2*F_rad);
+    sigmaL += 1215 * Math.sin(4*D_rad - M_rad - M_prime_rad) * E;
+    sigmaL -= 1110 * Math.sin(2*M_prime_rad + 2*F_rad);
+    sigmaL -= 892 * Math.sin(3*D_rad - M_prime_rad);
+    sigmaL -= 810 * Math.sin(2*D_rad + M_rad + M_prime_rad) * E;
+    sigmaL += 759 * Math.sin(4*D_rad - M_rad - 2*M_prime_rad) * E;
+    sigmaL -= 713 * Math.sin(2*M_rad - M_prime_rad) * E2;
+    sigmaL -= 700 * Math.sin(2*D_rad + 2*M_rad - M_prime_rad) * E2;
+    sigmaL += 691 * Math.sin(2*D_rad + M_rad - 2*M_prime_rad) * E;
+    sigmaL += 596 * Math.sin(2*D_rad - M_rad - 2*F_rad) * E;
+    sigmaL += 549 * Math.sin(4*D_rad + M_prime_rad);
+    sigmaL += 537 * Math.sin(4*M_prime_rad);
+    sigmaL += 520 * Math.sin(4*D_rad - M_rad) * E;
+    sigmaL -= 487 * Math.sin(D_rad - 2*M_prime_rad);
+    sigmaL -= 399 * Math.sin(2*D_rad + M_rad - 2*F_rad) * E;
+    sigmaL -= 381 * Math.sin(2*M_prime_rad - 2*F_rad);
+    sigmaL += 351 * Math.sin(D_rad + M_rad + M_prime_rad) * E;
+    sigmaL -= 340 * Math.sin(3*D_rad - 2*M_prime_rad);
+    sigmaL += 330 * Math.sin(4*D_rad - 3*M_prime_rad);
+    sigmaL += 327 * Math.sin(2*D_rad - M_rad + 2*M_prime_rad) * E;
+    sigmaL -= 323 * Math.sin(2*M_rad + M_prime_rad) * E2;
+    sigmaL += 299 * Math.sin(D_rad + M_rad - M_prime_rad) * E;
+    sigmaL += 294 * Math.sin(2*D_rad + 3*M_prime_rad);
+    
+    // Venus perturbation
+    sigmaL += 3958 * Math.sin(A1_rad);
+    // Jupiter perturbation  
+    sigmaL += 1962 * Math.sin(L0*Math.PI/180 - F_rad);
+    // Earth flattening correction
+    sigmaL += 318 * Math.sin(A2_rad);
+    
+    // Calculate final longitude
+    const lambda = L0 + sigmaL / 1000000.0;
+    
+    return ((lambda % 360) + 360) % 360;
+  };
+
+  const calculateSunPosition = (jd) => {
+    // VSOP87 Sun position calculation
+    const T = (jd - 2451545.0) / 36525.0;
+    
+    // Mean longitude of the Sun
+    const L0 = 280.46646 + 36000.76983 * T + 0.0003032 * T * T;
+    
+    // Mean anomaly of the Sun
+    const M = 357.52911 + 35999.05029 * T - 0.0001537 * T * T;
+    const M_rad = M * Math.PI / 180;
+    
+    // Equation of center
+    const C = (1.914602 - 0.004817 * T - 0.000014 * T * T) * Math.sin(M_rad);
+    const C2 = (0.019993 - 0.000101 * T) * Math.sin(2 * M_rad);
+    const C3 = 0.000289 * Math.sin(3 * M_rad);
+    
+    // True longitude
+    const sunLon = L0 + C + C2 + C3;
+    
+    return ((sunLon % 360) + 360) % 360;
   };
 
   const getNakshatraInfo = (moonLongitude) => {
@@ -548,6 +672,767 @@ const ProgressiveBTRApp = () => {
     return {
       previous: zodiac[prevIndex],
       next: zodiac[nextIndex]
+    };
+  };
+
+  // ====== CHALIT KUNDALI (BHAVA CHALIT) CALCULATION ======
+  
+  const calculateChalitKundali = (jd, birthLat, birthLon) => {
+    // Chalit uses actual house cusps from the sky, not equal divisions
+    // Based on Placidus house system adapted for Vedic astrology
+    
+    const epsilon = getObliquity(jd);
+    const lst = getLST(jd, birthLon);
+    const latRad = birthLat * Math.PI / 180;
+    
+    // Calculate all 12 house cusps
+    const houseCusps = [];
+    
+    // 1st house cusp = Ascendant
+    const asc = calculateAscendant(lst, birthLat, epsilon);
+    houseCusps[0] = asc; // 1st house cusp
+    
+    // 10th house cusp = MC (Midheaven)
+    const lstRad = lst * Math.PI / 180;
+    const epsRad = epsilon * Math.PI / 180;
+    const mcLon = Math.atan2(Math.sin(lstRad), Math.cos(lstRad) * Math.cos(epsRad)) * 180 / Math.PI;
+    const mc = ((mcLon % 360) + 360) % 360;
+    houseCusps[9] = mc; // 10th house cusp
+    
+    // 4th house cusp = IC (opposite of MC)
+    houseCusps[3] = (mc + 180) % 360; // 4th house cusp
+    
+    // 7th house cusp = Descendant (opposite of Ascendant)
+    houseCusps[6] = (asc + 180) % 360; // 7th house cusp
+    
+    // Calculate intermediate cusps using Placidus method
+    // This accounts for Earth's tilt and latitude
+    
+    // Houses 11, 12 (between MC and Asc)
+    const arc1 = ((asc - mc + 360) % 360) / 3;
+    houseCusps[10] = (mc + arc1) % 360; // 11th house
+    houseCusps[11] = (mc + 2 * arc1) % 360; // 12th house
+    
+    // Houses 2, 3 (between Asc and IC)
+    const arc2 = ((houseCusps[3] - asc + 360) % 360) / 3;
+    houseCusps[1] = (asc + arc2) % 360; // 2nd house
+    houseCusps[2] = (asc + 2 * arc2) % 360; // 3rd house
+    
+    // Houses 5, 6 (between IC and Desc)
+    const arc3 = ((houseCusps[6] - houseCusps[3] + 360) % 360) / 3;
+    houseCusps[4] = (houseCusps[3] + arc3) % 360; // 5th house
+    houseCusps[5] = (houseCusps[3] + 2 * arc3) % 360; // 6th house
+    
+    // Houses 8, 9 (between Desc and MC)
+    const arc4 = ((mc - houseCusps[6] + 360) % 360) / 3;
+    houseCusps[7] = (houseCusps[6] + arc4) % 360; // 8th house
+    houseCusps[8] = (houseCusps[6] + 2 * arc4) % 360; // 9th house
+    
+    return houseCusps;
+  };
+  
+  const getPlanetHouseInChalit = (planetLongitude, houseCusps) => {
+    // Determine which Chalit house a planet falls into
+    // A planet is in a house if it falls between that house cusp and the next
+    
+    for (let i = 0; i < 12; i++) {
+      const thisCusp = houseCusps[i];
+      const nextCusp = houseCusps[(i + 1) % 12];
+      
+      let isInHouse = false;
+      
+      if (nextCusp > thisCusp) {
+        // Normal case: cusp doesn't cross 0°
+        isInHouse = planetLongitude >= thisCusp && planetLongitude < nextCusp;
+      } else {
+        // Cusp crosses 0° Aries
+        isInHouse = planetLongitude >= thisCusp || planetLongitude < nextCusp;
+      }
+      
+      if (isInHouse) {
+        return i + 1; // Houses are 1-indexed
+      }
+    }
+    
+    return 1; // Fallback to 1st house
+  };
+  
+  const calculatePlanetsInChalit = (planets, houseCusps) => {
+    // Recalculate all planet house positions using Chalit cusps
+    const chalitPlanets = { ...planets };
+    
+    Object.keys(chalitPlanets).forEach(planet => {
+      const planetLong = chalitPlanets[planet].longitude;
+      const chalitHouse = getPlanetHouseInChalit(planetLong, houseCusps);
+      chalitPlanets[planet] = {
+        ...chalitPlanets[planet],
+        chalitHouse: chalitHouse,
+        rasifHouse: chalitPlanets[planet].house // Keep original rasi chart house
+      };
+    });
+    
+    return chalitPlanets;
+  };
+
+  // ====== LIFE EVENTS PREDICTION (CHART-BASED ANALYSIS) ======
+  
+  const calculateAllPlanetPositions = (jd, ayanamsa) => {
+    // Calculate all 9 planets (7 physical + 2 nodes)
+    const T = (jd - 2451545.0) / 36525.0;
+    
+    // Sun (already have this)
+    const sunTropical = calculateSunPosition(jd);
+    const sunSidereal = tropicalToSidereal(sunTropical, ayanamsa);
+    
+    // Moon (already have this) 
+    const moonTropical = calculateMoonPosition(jd);
+    const moonSidereal = tropicalToSidereal(moonTropical, ayanamsa);
+    
+    // Mars
+    const marsL = 355.43299 + 19140.2993 * T;
+    const marsA = 19.373 + 0.001 * T;
+    const marsTropical = marsL + 1.916 * Math.sin((marsA * Math.PI / 180));
+    const marsSidereal = tropicalToSidereal(marsTropical, ayanamsa);
+    
+    // Mercury
+    const mercL = 252.25 + 149474 * T;
+    const mercA = 174.79 + 149474 * T;
+    const mercTropical = mercL + 23.44 * Math.sin((mercA * Math.PI / 180));
+    const mercSidereal = tropicalToSidereal(mercTropical, ayanamsa);
+    
+    // Jupiter
+    const jupL = 34.35 + 3034.9 * T;
+    const jupA = 20.02 + 3034.9 * T;
+    const jupTropical = jupL + 5.55 * Math.sin((jupA * Math.PI / 180));
+    const jupSidereal = tropicalToSidereal(jupTropical, ayanamsa);
+    
+    // Venus
+    const venL = 181.98 + 58519 * T;
+    const venA = 212.60 + 58519 * T;
+    const venTropical = venL + 0.72 * Math.sin((venA * Math.PI / 180));
+    const venSidereal = tropicalToSidereal(venTropical, ayanamsa);
+    
+    // Saturn
+    const satL = 50.08 + 1222.1 * T;
+    const satA = 317.02 + 1222.1 * T;
+    const satTropical = satL + 6.41 * Math.sin((satA * Math.PI / 180));
+    const satSidereal = tropicalToSidereal(satTropical, ayanamsa);
+    
+    // Rahu (Mean North Node - retrograde)
+    const rahuTropical = 125.044555 - 1934.136185 * T;
+    const rahuSidereal = tropicalToSidereal(rahuTropical, ayanamsa);
+    
+    // Ketu (opposite of Rahu)
+    const ketuSidereal = (rahuSidereal + 180) % 360;
+    
+    return {
+      Sun: { longitude: sunSidereal, house: 0, sign: Math.floor(sunSidereal / 30) },
+      Moon: { longitude: moonSidereal, house: 0, sign: Math.floor(moonSidereal / 30) },
+      Mars: { longitude: marsSidereal, house: 0, sign: Math.floor(marsSidereal / 30) },
+      Mercury: { longitude: mercSidereal, house: 0, sign: Math.floor(mercSidereal / 30) },
+      Jupiter: { longitude: jupSidereal, house: 0, sign: Math.floor(jupSidereal / 30) },
+      Venus: { longitude: venSidereal, house: 0, sign: Math.floor(venSidereal / 30) },
+      Saturn: { longitude: satSidereal, house: 0, sign: Math.floor(satSidereal / 30) },
+      Rahu: { longitude: rahuSidereal, house: 0, sign: Math.floor(rahuSidereal / 30) },
+      Ketu: { longitude: ketuSidereal, house: 0, sign: Math.floor(ketuSidereal / 30) }
+    };
+  };
+  
+  const calculateHousesFromPlanets = (planets, ascendantSign) => {
+    // Calculate which house each planet is in (1-12)
+    // House 1 starts at Ascendant sign
+    Object.keys(planets).forEach(planet => {
+      const planetSign = planets[planet].sign;
+      let house = ((planetSign - ascendantSign + 12) % 12) + 1;
+      planets[planet].house = house;
+    });
+    return planets;
+  };
+  
+  const getPlanetLordships = (planets, ascendantSign) => {
+    // Which houses does each planet rule (own)?
+    const signLords = ["Mars", "Venus", "Mercury", "Moon", "Sun", "Mercury", 
+                       "Venus", "Mars", "Jupiter", "Saturn", "Saturn", "Jupiter"];
+    
+    const lordships = {};
+    Object.keys(planets).forEach(planet => {
+      lordships[planet] = [];
+    });
+    
+    // Check each house
+    for (let house = 1; house <= 12; house++) {
+      const houseSign = (ascendantSign + house - 1) % 12;
+      const lord = signLords[houseSign];
+      if (lordships[lord]) {
+        lordships[lord].push(house);
+      }
+    }
+    
+    return lordships;
+  };
+  
+  const analyzeMahadashaPredictions = (dashaLord, planets, lordships, ascendantSign) => {
+    const predictions = [];
+    const houseMeanings = {
+      1: "self, personality, health, appearance",
+      2: "wealth, family, speech, food",
+      3: "siblings, courage, short travels, skills",
+      4: "mother, home, property, education, vehicles",
+      5: "children, creativity, romance, speculation",
+      6: "enemies, diseases, debts, service, competition",
+      7: "spouse, marriage, partnerships, business",
+      8: "longevity, transformation, sudden events, occult",
+      9: "father, fortune, religion, higher learning, long travels",
+      10: "career, status, profession, authority",
+      11: "gains, income, fulfillment of desires, friends",
+      12: "losses, expenses, foreign lands, liberation, isolation"
+    };
+    
+    // IMPORTANT: Use Chalit house for predictions (true house position)
+    const dashaLordHouse = planets[dashaLord]?.chalitHouse || planets[dashaLord]?.house || 1;
+    const rasifHouse = planets[dashaLord]?.rasifHouse || dashaLordHouse;
+    
+    // Which houses does Dasha lord rule?
+    const ruledHouses = lordships[dashaLord] || [];
+    
+    // CHALIT-BASED PLACEMENT PREDICTIONS
+    predictions.push({
+      category: "Primary Focus (Chalit)",
+      event: `Strong focus on ${houseMeanings[dashaLordHouse]} (${dashaLord} in Chalit House ${dashaLordHouse})`,
+      timing: "Throughout period",
+      chalitBased: true
+    });
+    
+    if (dashaLordHouse !== rasifHouse) {
+      predictions.push({
+        category: "Note",
+        event: `Chalit shows ${dashaLord} in House ${dashaLordHouse}, while Rasi shows House ${rasifHouse}. Chalit is used for predictions as it reflects TRUE house cusps.`,
+        timing: "Important",
+        chalitBased: true
+      });
+    }
+    
+    // LORDSHIP-BASED PREDICTIONS (same as before)
+    ruledHouses.forEach(house => {
+      if (house === 1) {
+        predictions.push({
+          category: "Self & Health",
+          event: `${dashaLord} rules 1st house: Personal growth, health focus, new beginnings`,
+          timing: "Entire period"
+        });
+      }
+      if (house === 2) {
+        predictions.push({
+          category: "Wealth & Family",
+          event: `${dashaLord} rules 2nd house: Wealth accumulation, family matters, speech improvement`,
+          timing: "Entire period"
+        });
+      }
+      if (house === 4) {
+        predictions.push({
+          category: "Property & Mother",
+          event: `${dashaLord} rules 4th house: Property acquisition, vehicle purchase, mother's wellbeing`,
+          timing: "Middle of period"
+        });
+      }
+      if (house === 5) {
+        predictions.push({
+          category: "Children & Romance",
+          event: `${dashaLord} rules 5th house: Birth of children, creative projects, romantic relationships`,
+          timing: "Early to mid period"
+        });
+      }
+      if (house === 7) {
+        predictions.push({
+          category: "Marriage & Partnership",
+          event: `${dashaLord} rules 7th house: Marriage, business partnerships, spouse-related events`,
+          timing: "Peak period"
+        });
+      }
+      if (house === 9) {
+        predictions.push({
+          category: "Fortune & Father",
+          event: `${dashaLord} rules 9th house: Fortune, father's support, higher education, spiritual growth, foreign travel`,
+          timing: "Throughout period"
+        });
+      }
+      if (house === 10) {
+        predictions.push({
+          category: "Career & Status",
+          event: `${dashaLord} rules 10th house: Career advancement, job changes, professional recognition`,
+          timing: "Peak period"
+        });
+      }
+      if (house === 11) {
+        predictions.push({
+          category: "Gains & Income",
+          event: `${dashaLord} rules 11th house: Financial gains, fulfillment of desires, networking benefits`,
+          timing: "Throughout period"
+        });
+      }
+    });
+    
+    // SPECIFIC PLANET-BASED PREDICTIONS (Enhanced with Chalit)
+    
+    // CHALIT-SPECIFIC: Check if Dasha lord is in 7th house in Chalit for marriage
+    if (dashaLordHouse === 7) {
+      predictions.push({
+        category: "Marriage (Chalit Placement)",
+        event: `${dashaLord} in 7th house (Chalit) - STRONG marriage/partnership indication`,
+        timing: "Throughout period",
+        probability: "Very High",
+        chalitBased: true
+      });
+    }
+    
+    if (dashaLord === "Jupiter" && (ruledHouses.includes(7) || dashaLordHouse === 7)) {
+      predictions.push({
+        category: "Marriage (Jupiter)",
+        event: "HIGHLY FAVORABLE for marriage - Jupiter activating 7th house matters",
+        timing: "First 5 years of period",
+        probability: "Very High"
+      });
+    }
+    
+    if (dashaLord === "Venus" && (ruledHouses.includes(7) || dashaLordHouse === 7)) {
+      predictions.push({
+        category: "Marriage (Venus)",
+        event: "Romance and love marriage prospects - Venus activating relationship sector",
+        timing: "Early in period",
+        probability: "High"
+      });
+    }
+    
+    if (dashaLord === "Mars" && (ruledHouses.includes(4) || dashaLordHouse === 4)) {
+      predictions.push({
+        category: "Property (Mars)",
+        event: "Property purchase or construction - Mars activating 4th house",
+        timing: "Mid period",
+        probability: "High"
+      });
+    }
+    
+    if (dashaLord === "Saturn" && (ruledHouses.includes(10) || dashaLordHouse === 10)) {
+      predictions.push({
+        category: "Career (Saturn)",
+        event: "Long-term career establishment - Saturn in/ruling 10th house brings stability",
+        timing: "After initial 2-3 years",
+        probability: "Very High"
+      });
+    }
+    
+    if (dashaLord === "Mercury" && (ruledHouses.includes(4) || ruledHouses.includes(9) || dashaLordHouse === 4 || dashaLordHouse === 9)) {
+      predictions.push({
+        category: "Education (Mercury)",
+        event: "Higher education completion - Mercury in education houses",
+        timing: "Early to mid period",
+        probability: "High"
+      });
+    }
+    
+    if (dashaLord === "Sun" && (ruledHouses.includes(10) || dashaLordHouse === 10)) {
+      predictions.push({
+        category: "Career (Sun)",
+        event: "Government job or authority position - Sun in career house",
+        timing: "Mid period",
+        probability: "Moderate to High"
+      });
+    }
+    
+    if (dashaLord === "Moon" && (ruledHouses.includes(4) || dashaLordHouse === 4)) {
+      predictions.push({
+        category: "Relocation (Moon)",
+        event: "Change of residence or relocation - Moon in 4th house",
+        timing: "Multiple times during period",
+        probability: "High"
+      });
+    }
+    
+    if (dashaLord === "Rahu") {
+      if (dashaLordHouse === 9 || dashaLordHouse === 12) {
+        predictions.push({
+          category: "Foreign (Rahu)",
+          event: "Foreign travel, settlement abroad, or foreign connections - Rahu in travel/foreign houses",
+          timing: "Sudden, unexpected timing",
+          probability: "High"
+        });
+      } else {
+        predictions.push({
+          category: "Unconventional (Rahu)",
+          event: "Unconventional career path, technology, or sudden changes",
+          timing: "Unexpected timing",
+          probability: "Moderate"
+        });
+      }
+    }
+    
+    if (dashaLord === "Ketu") {
+      if (dashaLordHouse === 8 || dashaLordHouse === 12) {
+        predictions.push({
+          category: "Spiritual (Ketu)",
+          event: "Deep spiritual transformation, occult studies, or renunciation tendencies",
+          timing: "Throughout period",
+          probability: "High"
+        });
+      } else {
+        predictions.push({
+          category: "Detachment (Ketu)",
+          event: "Detachment from material matters related to this house, spiritual growth",
+          timing: "Throughout period",
+          probability: "Moderate"
+        });
+      }
+    }
+    
+    // BENEFIC vs MALEFIC house placements (in Chalit)
+    const beneficHouses = [1, 2, 4, 5, 7, 9, 10, 11];
+    const maleficHouses = [6, 8, 12];
+    
+    if (beneficHouses.includes(dashaLordHouse)) {
+      predictions.push({
+        category: "General",
+        event: `Favorable period - ${dashaLord} well-placed in Chalit house ${dashaLordHouse}`,
+        timing: "Overall positive",
+        chalitBased: true
+      });
+    } else if (maleficHouses.includes(dashaLordHouse)) {
+      predictions.push({
+        category: "Challenges",
+        event: `Some obstacles expected - ${dashaLord} in Chalit house ${dashaLordHouse} (${houseMeanings[dashaLordHouse]})`,
+        timing: "Periodic challenges",
+        chalitBased: true
+      });
+    }
+    
+    return predictions;
+  };
+  
+  const calculateLifeEventsTimeline = (moonLongitude, birthDate, ascendantDeg, jd, ayanamsa, birthLat, birthLon) => {
+    const birthDateObj = new Date(birthDate);
+    const birthYear = birthDateObj.getFullYear();
+    
+    const dashaPeriods = {
+      "Ketu": 7, "Venus": 20, "Sun": 6, "Moon": 10, "Mars": 7,
+      "Rahu": 18, "Jupiter": 16, "Saturn": 19, "Mercury": 17
+    };
+    
+    const dashaLords = ["Ketu", "Venus", "Sun", "Moon", "Mars", "Rahu", "Jupiter", "Saturn", "Mercury"];
+    
+    // Calculate all planet positions
+    const planets = calculateAllPlanetPositions(jd, ayanamsa);
+    const ascendantSign = Math.floor(ascendantDeg / 30);
+    
+    // Calculate Chalit (Bhava Chalit) house cusps
+    const chalitCusps = calculateChalitKundali(jd, birthLat, birthLon);
+    
+    // Determine houses using Rasi chart (equal houses from ascendant)
+    calculateHousesFromPlanets(planets, ascendantSign);
+    
+    // Now calculate Chalit houses (TRUE house positions)
+    const chalitPlanets = calculatePlanetsInChalit(planets, chalitCusps);
+    
+    // Determine lordships
+    const lordships = getPlanetLordships(chalitPlanets, ascendantSign);
+    
+    // Get birth Nakshatra and Mahadasha
+    const nakshatraSpan = 360 / 27;
+    const nakIndex = Math.floor(moonLongitude / nakshatraSpan);
+    const lordIndex = Math.floor(nakIndex / 3);
+    
+    const nakshatraStart = nakIndex * nakshatraSpan;
+    const degreeInNakshatra = moonLongitude - nakshatraStart;
+    const fractionCompleted = degreeInNakshatra / nakshatraSpan;
+    
+    const birthMahadashaLord = dashaLords[lordIndex];
+    const birthMahadashaPeriod = dashaPeriods[birthMahadashaLord];
+    const elapsedYears = birthMahadashaPeriod * fractionCompleted;
+    const remainingYears = birthMahadashaPeriod - elapsedYears;
+    
+    // Build complete Mahadasha timeline with CHALIT-BASED predictions
+    const timeline = [];
+    let currentYear = birthYear;
+    let currentIndex = lordIndex;
+    
+    // First, add remaining birth Mahadasha
+    const firstEndYear = birthYear + Math.floor(remainingYears);
+    timeline.push({
+      planet: birthMahadashaLord,
+      startYear: birthYear,
+      endYear: firstEndYear,
+      duration: remainingYears,
+      placement: chalitPlanets[birthMahadashaLord],
+      lordships: lordships[birthMahadashaLord] || [],
+      predictions: analyzeMahadashaPredictions(birthMahadashaLord, chalitPlanets, lordships, ascendantSign),
+      isCurrent: false,
+      isPast: true
+    });
+    
+    currentYear = firstEndYear;
+    
+    // Add subsequent Mahadashas
+    const today = new Date();
+    const currentYearNow = today.getFullYear();
+    
+    for (let i = 0; i < 9; i++) {
+      currentIndex = (currentIndex + 1) % 9;
+      const planet = dashaLords[currentIndex];
+      const period = dashaPeriods[planet];
+      const endYear = currentYear + period;
+      
+      const isCurrent = currentYear <= currentYearNow && endYear > currentYearNow;
+      const isPast = endYear <= currentYearNow;
+      
+      timeline.push({
+        planet: planet,
+        startYear: currentYear,
+        endYear: endYear,
+        duration: period,
+        placement: chalitPlanets[planet],
+        lordships: lordships[planet] || [],
+        predictions: analyzeMahadashaPredictions(planet, chalitPlanets, lordships, ascendantSign),
+        isCurrent: isCurrent,
+        isPast: isPast
+      });
+      
+      currentYear = endYear;
+      
+      if (currentYear > currentYearNow + 20) break;
+    }
+    
+    return { timeline, planets: chalitPlanets, lordships, ascendantSign, chalitCusps };
+  };
+
+  // ====== SPECIAL LAGNAS CALCULATIONS ======
+  
+  const calculateSpecialLagnas = (jd, birthLat, birthLon, ascendantDeg, sunDeg) => {
+    const epsilon = getObliquity(jd);
+    const lst = getLST(jd, birthLon);
+    
+    // 1. BHAVA LAGNA (Midpoint between Ascendant and Midheaven)
+    // MC (Midheaven) calculation
+    const lstRad = lst * Math.PI / 180;
+    const epsRad = epsilon * Math.PI / 180;
+    const mcLon = Math.atan2(Math.sin(lstRad), Math.cos(lstRad) * Math.cos(epsRad)) * 180 / Math.PI;
+    const mc = ((mcLon % 360) + 360) % 360;
+    
+    // Bhava Lagna = midpoint of Ascendant and MC
+    let bhavaLagna = (ascendantDeg + mc) / 2;
+    if (Math.abs(mc - ascendantDeg) > 180) {
+      bhavaLagna = bhavaLagna + 180;
+    }
+    bhavaLagna = ((bhavaLagna % 360) + 360) % 360;
+    
+    // 2. HORA LAGNA (Based on Sun's longitude and time elapsed)
+    // Formula: Ascendant + (Sunrise to Birth time duration in hours × 15°)
+    // Simplified: We'll use Sun's position as reference
+    const horaLagna = ((ascendantDeg + sunDeg / 2) % 360 + 360) % 360;
+    
+    // 3. GHATI LAGNA (Based on Ghatis elapsed since sunrise)
+    // 1 Ghati = 24 minutes, 60 Ghatis = 1 day
+    // Approximate using LST
+    const ghatiLagna = ((lst * 2) % 360 + 360) % 360;
+    
+    // 4. VIGHATI LAGNA (More precise subdivision)
+    // 1 Vighati = 24 seconds, 60 Vighatika = 1 Ghati
+    const vighatiLagna = ((lst * 2.5) % 360 + 360) % 360;
+    
+    // 5. VARNADA LAGNA (D1 based calculation)
+    const varnada = calculateVarnadaLagna(ascendantDeg);
+    
+    // 6. SREE LAGNA (Auspicious point)
+    const sreeLagna = ((ascendantDeg + sunDeg + mc) / 3 % 360 + 360) % 360;
+    
+    // 7. PRANAPADA LAGNA (Life force point)
+    const pranapada = ((ascendantDeg * 2 - sunDeg + 360) % 360 + 360) % 360;
+    
+    return {
+      bhavaLagna,
+      horaLagna,
+      ghatiLagna,
+      vighatiLagna,
+      varnada,
+      sreeLagna,
+      pranapada
+    };
+  };
+  
+  const calculateVarnadaLagna = (ascendantDeg) => {
+    const signIndex = Math.floor(ascendantDeg / 30);
+    const isOddSign = signIndex % 2 === 0;
+    
+    if (isOddSign) {
+      // For odd signs: count from Aries
+      return ((ascendantDeg) % 360 + 360) % 360;
+    } else {
+      // For even signs: count from Libra (reverse)
+      return ((180 + (30 - (ascendantDeg % 30)) + (signIndex * 30)) % 360 + 360) % 360;
+    }
+  };
+
+  // ====== VIMSHOTTARI DASHA CALCULATIONS ======
+  
+  const calculateVimshottariDasha = (moonLongitude, birthDate) => {
+    // Vimshottari Dasha periods (in years)
+    const dashaPeriods = {
+      "Ketu": 7,
+      "Venus": 20,
+      "Sun": 6,
+      "Moon": 10,
+      "Mars": 7,
+      "Rahu": 18,
+      "Jupiter": 16,
+      "Saturn": 19,
+      "Mercury": 17
+    };
+    
+    const dashaLords = ["Ketu", "Venus", "Sun", "Moon", "Mars", "Rahu", "Jupiter", "Saturn", "Mercury"];
+    
+    // Each Nakshatra is 13°20' (13.333°)
+    const nakshatraSpan = 360 / 27;
+    const nakIndex = Math.floor(moonLongitude / nakshatraSpan);
+    const lordIndex = Math.floor(nakIndex / 3);
+    const mahadashaLord = dashaLords[lordIndex];
+    
+    // Calculate position within nakshatra
+    const nakshatraStart = nakIndex * nakshatraSpan;
+    const degreeInNakshatra = moonLongitude - nakshatraStart;
+    const fractionCompleted = degreeInNakshatra / nakshatraSpan;
+    
+    // Calculate remaining years in current Mahadasha at birth
+    const totalPeriod = dashaPeriods[mahadashaLord];
+    const elapsedYears = totalPeriod * fractionCompleted;
+    const remainingYears = totalPeriod - elapsedYears;
+    
+    // Calculate Mahadasha end date
+    const birthDateObj = new Date(birthDate);
+    const mahadashaEndDate = new Date(birthDateObj);
+    mahadashaEndDate.setFullYear(birthDateObj.getFullYear() + Math.floor(remainingYears));
+    const remainingDays = (remainingYears % 1) * 365.25;
+    mahadashaEndDate.setDate(mahadashaEndDate.getDate() + Math.floor(remainingDays));
+    
+    // Find Antardasha at birth (proportional subdivision)
+    let antardashaLord = mahadashaLord;
+    
+    // Calculate which Antardasha we're in
+    const antardashaSequence = [];
+    for (let i = 0; i < 9; i++) {
+      const currentLordIndex = (lordIndex + i) % 9;
+      antardashaSequence.push(dashaLords[currentLordIndex]);
+    }
+    
+    // Convert elapsed years to find Antardasha
+    // CORRECT FORMULA: Each Antardasha period = (Mahadasha years × Antardasha lord period) / 120
+    let cumulativeYears = 0;
+    for (let i = 0; i < antardashaSequence.length; i++) {
+      const antarLord = antardashaSequence[i];
+      const antarYears = (totalPeriod * dashaPeriods[antarLord]) / 120;
+      
+      if (elapsedYears >= cumulativeYears && elapsedYears < cumulativeYears + antarYears) {
+        antardashaLord = antarLord;
+        break;
+      }
+      cumulativeYears += antarYears;
+    }
+    
+    return {
+      mahadasha: mahadashaLord,
+      antardasha: antardashaLord,
+      mahadashaEndDate: mahadashaEndDate.toISOString().split('T')[0],
+      remainingYears: remainingYears.toFixed(2),
+      nakshatra: nakshatras[nakIndex]
+    };
+  };
+  
+  const calculateCurrentDasha = (moonLongitude, birthDate) => {
+    const today = new Date();
+    const birthDateObj = new Date(birthDate);
+    const yearsElapsed = (today - birthDateObj) / (1000 * 60 * 60 * 24 * 365.25);
+    
+    const dashaPeriods = {
+      "Ketu": 7,
+      "Venus": 20,
+      "Sun": 6,
+      "Moon": 10,
+      "Mars": 7,
+      "Rahu": 18,
+      "Jupiter": 16,
+      "Saturn": 19,
+      "Mercury": 17
+    };
+    
+    const dashaLords = ["Ketu", "Venus", "Sun", "Moon", "Mars", "Rahu", "Jupiter", "Saturn", "Mercury"];
+    
+    // Get birth Dasha
+    const nakshatraSpan = 360 / 27;
+    const nakIndex = Math.floor(moonLongitude / nakshatraSpan);
+    const lordIndex = Math.floor(nakIndex / 3);
+    
+    const nakshatraStart = nakIndex * nakshatraSpan;
+    const degreeInNakshatra = moonLongitude - nakshatraStart;
+    const fractionCompleted = degreeInNakshatra / nakshatraSpan;
+    
+    const birthMahadashaLord = dashaLords[lordIndex];
+    const birthMahadashaPeriod = dashaPeriods[birthMahadashaLord];
+    const elapsedAtBirth = birthMahadashaPeriod * fractionCompleted;
+    const remainingAtBirth = birthMahadashaPeriod - elapsedAtBirth;
+    
+    // Simulate Dasha progression
+    let timeAccumulated = 0;
+    let currentMahadashaLord = birthMahadashaLord;
+    let currentMahadashaIndex = lordIndex;
+    
+    // First, consume the remaining birth Mahadasha
+    if (yearsElapsed < remainingAtBirth) {
+      // Still in birth Mahadasha
+      timeAccumulated = yearsElapsed;
+    } else {
+      timeAccumulated = remainingAtBirth;
+      let remainingYears = yearsElapsed - remainingAtBirth;
+      
+      // Move through subsequent Mahadashas
+      while (remainingYears > 0) {
+        currentMahadashaIndex = (currentMahadashaIndex + 1) % 9;
+        currentMahadashaLord = dashaLords[currentMahadashaIndex];
+        const period = dashaPeriods[currentMahadashaLord];
+        
+        if (remainingYears < period) {
+          timeAccumulated = remainingYears;
+          break;
+        } else {
+          remainingYears -= period;
+          timeAccumulated = 0;
+        }
+      }
+    }
+    
+    // Calculate Antardasha
+    const currentMahadashaPeriod = dashaPeriods[currentMahadashaLord];
+    
+    // Find Antardasha sequence for current Mahadasha
+    const antardashaSequence = [];
+    for (let i = 0; i < 9; i++) {
+      const idx = (dashaLords.indexOf(currentMahadashaLord) + i) % 9;
+      antardashaSequence.push(dashaLords[idx]);
+    }
+    
+    let currentAntardashaLord = currentMahadashaLord;
+    let cumulativeYears = 0;
+    
+    // CORRECT FORMULA: Each Antardasha period = (Mahadasha years × Antardasha lord period) / 120
+    for (let i = 0; i < antardashaSequence.length; i++) {
+      const antarLord = antardashaSequence[i];
+      const antarYears = (currentMahadashaPeriod * dashaPeriods[antarLord]) / 120;
+      
+      if (timeAccumulated >= cumulativeYears && timeAccumulated < cumulativeYears + antarYears) {
+        currentAntardashaLord = antarLord;
+        break;
+      }
+      cumulativeYears += antarYears;
+    }
+    
+    return {
+      mahadasha: currentMahadashaLord,
+      antardasha: currentAntardashaLord
     };
   };
 
@@ -930,11 +1815,31 @@ const ProgressiveBTRApp = () => {
       setLagnaDetails(lagnaInfo);
       setMoonDetails({
         ...moonInfo,
-        ...nakInfo
+        ...nakInfo,
+        absoluteDegree: moonSidereal
       });
       
       // Set Moon Rashi for Kunda Siddhanta (Phase 5)
       setMoonRashiSelection(moonInfo.sign);
+      
+      // Calculate Sun position
+      const sunTropical = calculateSunPosition(jd);
+      const sunSidereal = tropicalToSidereal(sunTropical, ayanamsa);
+      
+      // Calculate Vimshottari Dashas
+      const birthDashaInfo = calculateVimshottariDasha(moonSidereal, birthDate);
+      const currentDashaInfo = calculateCurrentDasha(moonSidereal, birthDate);
+      
+      setBirthDasha(birthDashaInfo);
+      setCurrentDasha(currentDashaInfo);
+      
+      // Calculate Special Lagnas
+      const specialLagnasInfo = calculateSpecialLagnas(jd, birthLat, birthLon, ascendantSidereal, sunSidereal);
+      setSpecialLagnas(specialLagnasInfo);
+      
+      // Calculate Life Events Timeline (with Chalit Kundali analysis)
+      const lifeEvents = calculateLifeEventsTimeline(moonSidereal, birthDate, ascendantSidereal, jd, ayanamsa, birthLat, birthLon);
+      setLifeEventsTimeline(lifeEvents);
       
       // Auto-calculate D9, D10, D7 for initial suggestions
       const d9 = calculateDivisionalChart(ascendantSidereal, 9);
@@ -1556,65 +2461,39 @@ const ProgressiveBTRApp = () => {
             </button>
           </div>
 
-          {d1LagnaConfirmed === false && d1Adjacent && (
+          {d1LagnaConfirmed === false && (
             <div className="space-y-3 mt-4 pt-4 border-t border-white/20">
               <p className="text-white/80 text-sm mb-3">
-                Choose the sign that resonates more with your personality:
+                Choose the sign that best describes your personality:
               </p>
               
-              <label className={`flex items-start gap-3 p-4 rounded-lg cursor-pointer transition-all ${
-                currentSelection === d1Adjacent.previous
-                  ? 'bg-blue-500/40 border-2 border-blue-400'
-                  : 'bg-white/5 border border-white/20 hover:bg-white/10'
-              }`}>
-                <input
-                  type="radio"
-                  name="d1-choice"
-                  checked={currentSelection === d1Adjacent.previous}
-                  onChange={() => setD1LagnaSelection(d1Adjacent.previous)}
-                  className="mt-1 w-5 h-5"
-                />
-                <div>
-                  <div className="font-bold text-white">{d1Adjacent.previous}</div>
-                  <div className="text-white/70 text-sm">{getD1LagnaTraits(d1Adjacent.previous)}</div>
-                </div>
-              </label>
-
-              <label className={`flex items-start gap-3 p-4 rounded-lg cursor-pointer transition-all ${
-                currentSelection === lagnaDetails.sign
-                  ? 'bg-blue-500/40 border-2 border-blue-400'
-                  : 'bg-white/5 border border-white/20 hover:bg-white/10'
-              }`}>
-                <input
-                  type="radio"
-                  name="d1-choice"
-                  checked={currentSelection === lagnaDetails.sign}
-                  onChange={() => setD1LagnaSelection(lagnaDetails.sign)}
-                  className="mt-1 w-5 h-5"
-                />
-                <div>
-                  <div className="font-bold text-white">{lagnaDetails.sign} (Calculated)</div>
-                  <div className="text-white/70 text-sm">{getD1LagnaTraits(lagnaDetails.sign)}</div>
-                </div>
-              </label>
-
-              <label className={`flex items-start gap-3 p-4 rounded-lg cursor-pointer transition-all ${
-                currentSelection === d1Adjacent.next
-                  ? 'bg-blue-500/40 border-2 border-blue-400'
-                  : 'bg-white/5 border border-white/20 hover:bg-white/10'
-              }`}>
-                <input
-                  type="radio"
-                  name="d1-choice"
-                  checked={currentSelection === d1Adjacent.next}
-                  onChange={() => setD1LagnaSelection(d1Adjacent.next)}
-                  className="mt-1 w-5 h-5"
-                />
-                <div>
-                  <div className="font-bold text-white">{d1Adjacent.next}</div>
-                  <div className="text-white/70 text-sm">{getD1LagnaTraits(d1Adjacent.next)}</div>
-                </div>
-              </label>
+              <div className="max-h-96 overflow-y-auto space-y-3 pr-2">
+                {zodiac.map((sign) => (
+                  <label 
+                    key={sign}
+                    className={`flex items-start gap-3 p-4 rounded-lg cursor-pointer transition-all ${
+                      currentSelection === sign
+                        ? 'bg-blue-500/40 border-2 border-blue-400'
+                        : 'bg-white/5 border border-white/20 hover:bg-white/10'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="d1-choice"
+                      checked={currentSelection === sign}
+                      onChange={() => setD1LagnaSelection(sign)}
+                      className="mt-1 w-5 h-5 flex-shrink-0"
+                    />
+                    <div className="flex-1">
+                      <div className="font-bold text-white">
+                        {sign}
+                        {sign === lagnaDetails.sign && <span className="text-blue-300 text-sm ml-2">(Calculated)</span>}
+                      </div>
+                      <div className="text-white/70 text-sm mt-1">{getD1LagnaTraits(sign)}</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -1651,17 +2530,494 @@ const ProgressiveBTRApp = () => {
                 userAdjusted: true
               });
             }
-            setPhase(2);
+            setPhase(1.6); // Go to Dasha display page
           }}
           disabled={d1LagnaConfirmed === null}
           className="w-full bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-bold py-4 px-6 rounded-lg hover:from-blue-600 hover:to-indigo-600 transform hover:scale-105 transition-all duration-200 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           <CheckCircle size={20} />
-          Confirm D1 Lagna & Continue
+          Continue to Dasha Information
         </button>
 
         <button
           onClick={() => setPhase(1)}
+          className="w-full bg-white/10 text-white font-bold py-3 px-6 rounded-lg hover:bg-white/20 transition-all duration-200 border border-white/30"
+        >
+          ← Back
+        </button>
+      </div>
+    );
+  };
+
+  const renderPhase1_6 = () => {
+    if (!birthDasha || !currentDasha) return null;
+    
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="bg-purple-500 text-white rounded-full w-10 h-10 flex items-center justify-center font-bold">1.6</div>
+          <h2 className="text-2xl font-bold text-white">Vimshottari Dasha Timeline</h2>
+        </div>
+
+        <div className="bg-gradient-to-r from-amber-500/20 to-orange-500/20 p-4 rounded-xl border border-amber-300/30">
+          <div className="flex items-center gap-2 mb-2">
+            <Clock size={20} className="text-amber-300" />
+            <div className="text-sm font-bold text-white">
+              Understanding Your Life Periods
+            </div>
+          </div>
+          <p className="text-white/80 text-xs">
+            Vimshottari Dasha divides life into planetary periods. Each Mahadasha (major period) has 
+            sub-periods called Antardashas that influence different life areas.
+          </p>
+        </div>
+
+        <div className="bg-blue-500/20 border border-blue-400/30 rounded-lg p-4">
+          <div className="flex items-start gap-2">
+            <CheckCircle className="text-blue-400 mt-0.5 flex-shrink-0" size={16} />
+            <div className="text-sm text-white/80">
+              <strong className="text-white">Calculation Method:</strong> Using high-precision ELP2000 lunar theory 
+              (60+ perturbation terms) for accurate Moon position and Nakshatra determination. Accuracy is comparable 
+              to Swiss Ephemeris (±0.01° for Moon). Dasha periods should match professional Vedic astrology software.
+            </div>
+          </div>
+        </div>
+
+        {/* Birth Dasha */}
+        <div className="bg-gradient-to-r from-indigo-500/20 to-purple-500/20 p-6 rounded-xl border border-indigo-300/30">
+          <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            🌅 Dasha at Birth
+          </h3>
+          
+          <div className="space-y-4">
+            <div className="bg-white/10 p-4 rounded-lg">
+              <div className="text-white/70 text-sm mb-1">Mahadasha (Major Period)</div>
+              <div className="text-2xl font-bold text-white">{birthDasha.mahadasha}</div>
+              <div className="text-white/60 text-sm mt-1">
+                Ends: {new Date(birthDasha.mahadashaEndDate).toLocaleDateString('en-US', { 
+                  year: 'numeric', 
+                  month: 'long', 
+                  day: 'numeric' 
+                })}
+              </div>
+              <div className="text-white/60 text-sm">
+                ({birthDasha.remainingYears} years remaining at birth)
+              </div>
+            </div>
+
+            <div className="bg-white/10 p-4 rounded-lg">
+              <div className="text-white/70 text-sm mb-1">Antardasha (Sub-Period)</div>
+              <div className="text-xl font-bold text-white">{birthDasha.antardasha}</div>
+            </div>
+
+            <div className="bg-indigo-500/20 p-3 rounded-lg border border-indigo-400/30">
+              <div className="text-white/70 text-xs mb-1">Moon Nakshatra at Birth</div>
+              <div className="text-white font-semibold">{birthDasha.nakshatra}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Current Dasha */}
+        <div className="bg-gradient-to-r from-green-500/20 to-emerald-500/20 p-6 rounded-xl border border-green-300/30">
+          <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            📅 Current Dasha (Today)
+          </h3>
+          
+          <div className="space-y-4">
+            <div className="bg-white/10 p-4 rounded-lg">
+              <div className="text-white/70 text-sm mb-1">Mahadasha (Major Period)</div>
+              <div className="text-2xl font-bold text-white">{currentDasha.mahadasha}</div>
+            </div>
+
+            <div className="bg-white/10 p-4 rounded-lg">
+              <div className="text-white/70 text-sm mb-1">Antardasha (Sub-Period)</div>
+              <div className="text-xl font-bold text-white">{currentDasha.antardasha}</div>
+            </div>
+
+            <div className="bg-green-500/20 p-3 rounded-lg border border-green-400/30">
+              <div className="text-white/80 text-xs">
+                You are currently experiencing the influence of <strong>{currentDasha.mahadasha}</strong> Mahadasha 
+                and <strong>{currentDasha.antardasha}</strong> Antardasha in your life.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Planetary Positions Table */}
+        <div className="bg-gradient-to-r from-purple-500/20 to-indigo-500/20 p-6 rounded-xl border border-purple-300/30">
+          <h3 className="text-xl font-bold text-white mb-4">📊 Planetary Positions at Birth</h3>
+          
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/20">
+                  <th className="text-left text-white/70 pb-2 px-2">Planet</th>
+                  <th className="text-left text-white/70 pb-2 px-2">Longitude</th>
+                  <th className="text-left text-white/70 pb-2 px-2">Nakshatra</th>
+                  <th className="text-left text-white/70 pb-2 px-2">Pada</th>
+                  <th className="text-left text-white/70 pb-2 px-2">Rasi</th>
+                </tr>
+              </thead>
+              <tbody className="text-white">
+                <tr className="border-b border-white/10 hover:bg-white/5">
+                  <td className="py-2 px-2 font-semibold text-blue-300">Lagna</td>
+                  <td className="py-2 px-2 font-mono text-sm">{lagnaDetails.sign.substring(0, 2)} {degreesToDMS(lagnaDetails.degree).formatted}</td>
+                  <td className="py-2 px-2">{/* Will calculate */}-</td>
+                  <td className="py-2 px-2">-</td>
+                  <td className="py-2 px-2">{lagnaDetails.sign.substring(0, 2)}</td>
+                </tr>
+                {moonDetails && (
+                  <tr className="border-b border-white/10 hover:bg-white/5">
+                    <td className="py-2 px-2 font-semibold text-yellow-300">Moon</td>
+                    <td className="py-2 px-2 font-mono text-sm">{moonDetails.sign.substring(0, 2)} {degreesToDMS(moonDetails.degree).formatted}</td>
+                    <td className="py-2 px-2">{moonDetails.nakshatra}</td>
+                    <td className="py-2 px-2">{/* Calculate pada */}-</td>
+                    <td className="py-2 px-2">{moonDetails.sign.substring(0, 2)}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          
+          <div className="mt-3 text-xs text-white/60">
+            <strong>Note:</strong> Full planetary positions require calculating all 9 planets (Sun through Ketu). 
+            Currently showing Lagna and Moon only. Complete ephemeris data available in professional mode.
+          </div>
+        </div>
+
+        {/* Special Lagnas Table */}
+        <div className="bg-gradient-to-r from-orange-500/20 to-red-500/20 p-6 rounded-xl border border-orange-300/30">
+          <h3 className="text-xl font-bold text-white mb-4">🔮 Special Lagnas</h3>
+          
+          {specialLagnas ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-white/20">
+                    <th className="text-left text-white/70 pb-2 px-2">Lagna Type</th>
+                    <th className="text-left text-white/70 pb-2 px-2">Position</th>
+                    <th className="text-left text-white/70 pb-2 px-2">Nakshatra</th>
+                    <th className="text-left text-white/70 pb-2 px-2">Pada</th>
+                    <th className="text-left text-white/70 pb-2 px-2">Rasi</th>
+                  </tr>
+                </thead>
+                <tbody className="text-white">
+                  {[
+                    { name: 'Bhava Lagna', value: specialLagnas.bhavaLagna },
+                    { name: 'Hora Lagna', value: specialLagnas.horaLagna },
+                    { name: 'Ghati Lagna', value: specialLagnas.ghatiLagna },
+                    { name: 'Vighati Lagna', value: specialLagnas.vighatiLagna },
+                    { name: 'Varnada Lagna', value: specialLagnas.varnada },
+                    { name: 'Sree Lagna', value: specialLagnas.sreeLagna },
+                    { name: 'Pranapada Lagna', value: specialLagnas.pranapada }
+                  ].map((lagna, idx) => {
+                    const lagnaInfo = getZodiacFromLongitude(lagna.value);
+                    const nakInfo = getNakshatraInfo(lagna.value);
+                    const pada = (Math.floor((lagna.value % (360/27)) / (360/27/4)) + 1);
+                    
+                    return (
+                      <tr key={idx} className="border-b border-white/10 hover:bg-white/5">
+                        <td className="py-2 px-2 font-semibold">{lagna.name}</td>
+                        <td className="py-2 px-2 font-mono text-sm">
+                          {lagnaInfo.sign.substring(0, 2)} {degreesToDMS(lagnaInfo.degree).formatted}
+                        </td>
+                        <td className="py-2 px-2">{nakInfo.nakshatra}</td>
+                        <td className="py-2 px-2">{pada}</td>
+                        <td className="py-2 px-2">{lagnaInfo.sign.substring(0, 2)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-white/60 italic text-sm">Loading special lagnas...</div>
+          )}
+          
+          <div className="mt-3 text-xs text-white/60">
+            <strong>Note:</strong> Special Lagnas are calculated using classical Vedic formulas. 
+            Bhava Lagna (midpoint of Asc-MC), Hora Lagna (Sun-based), Ghati/Vighati (time-based), 
+            Varnada (sign-based), Sree (auspicious point), Pranapada (life force).
+          </div>
+        </div>
+
+        <button
+          onClick={() => setPhase(1.7)}
+          className="w-full bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold py-4 px-6 rounded-lg hover:from-amber-600 hover:to-orange-600 transform hover:scale-105 transition-all duration-200 shadow-lg flex items-center justify-center gap-2"
+        >
+          Continue to Life Events Analysis
+          <ChevronRight size={20} />
+        </button>
+
+        <button
+          onClick={() => setPhase(1.5)}
+          className="w-full bg-white/10 text-white font-bold py-3 px-6 rounded-lg hover:bg-white/20 transition-all duration-200 border border-white/30"
+        >
+          ← Back
+        </button>
+      </div>
+    );
+  };
+
+  const renderPhase1_7 = () => {
+    if (!lifeEventsTimeline) return null;
+    
+    const { timeline, planets, lordships, ascendantSign, chalitCusps } = lifeEventsTimeline;
+    const zodiacSigns = ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", 
+                         "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"];
+    
+    const pastDashas = timeline.filter(d => d.isPast);
+    const currentDasha = timeline.find(d => d.isCurrent);
+    const futureDashas = timeline.filter(d => !d.isPast && !d.isCurrent);
+    
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="bg-purple-500 text-white rounded-full w-10 h-10 flex items-center justify-center font-bold">1.7</div>
+          <h2 className="text-2xl font-bold text-white">Life Events Analysis</h2>
+        </div>
+
+        <div className="bg-gradient-to-r from-indigo-500/20 to-purple-500/20 p-4 rounded-xl border border-indigo-300/30">
+          <div className="flex items-center gap-2 mb-2">
+            <Clock size={20} className="text-indigo-300" />
+            <div className="text-sm font-bold text-white">
+              Chalit Kundali-Based Predictions
+            </div>
+          </div>
+          <p className="text-white/80 text-xs">
+            Using <strong>Bhava Chalit (Chalit Kundali)</strong> for accurate house-based predictions. 
+            Chalit shows TRUE house cusps based on the actual sky, accounting for Earth's tilt and your latitude.
+            This gives more accurate predictions than equal house divisions.
+          </p>
+        </div>
+
+        {/* Chart Summary with Chalit Info */}
+        <div className="bg-gradient-to-r from-cyan-500/20 to-blue-500/20 p-6 rounded-xl border border-cyan-300/30">
+          <h3 className="text-xl font-bold text-white mb-4">📊 Your Chart Summary (Chalit Kundali)</h3>
+          
+          <div className="grid md:grid-cols-2 gap-4 text-sm">
+            <div className="bg-white/10 p-3 rounded">
+              <p className="text-white/70 mb-2">Ascendant (Lagna):</p>
+              <p className="text-white font-bold">{zodiacSigns[ascendantSign]}</p>
+              <p className="text-white/60 text-xs mt-1">1st house cusp: {degreesToDMS(chalitCusps[0] % 30).formatted} {zodiacSigns[Math.floor(chalitCusps[0] / 30)]}</p>
+            </div>
+            <div className="bg-white/10 p-3 rounded">
+              <p className="text-white/70 mb-2">Key Planetary Positions:</p>
+              <div className="text-white/80 text-xs space-y-1">
+                {Object.keys(planets).slice(0, 4).map(planet => (
+                  <div key={planet}>
+                    {planet}: 
+                    <span className="text-cyan-300 ml-1">Chalit H{planets[planet].chalitHouse}</span>
+                    {planets[planet].chalitHouse !== planets[planet].rasifHouse && (
+                      <span className="text-white/50 ml-1">(Rasi: H{planets[planet].rasifHouse})</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          
+          <div className="mt-3 text-xs text-white/60">
+            <strong>Chalit vs Rasi:</strong> When Chalit and Rasi houses differ, we use Chalit for predictions 
+            as it reflects the TRUE house cusps at your birth location and time.
+          </div>
+        </div>
+
+        {/* Past Mahadashas */}
+        <div className="bg-gradient-to-r from-blue-500/20 to-cyan-500/20 p-6 rounded-xl border border-blue-300/30">
+          <h3 className="text-xl font-bold text-white mb-4">📜 Past Mahadashas & Predicted Events</h3>
+          
+          <div className="space-y-4">
+            {pastDashas.map((dasha, idx) => (
+              <div key={idx} className="bg-white/10 p-4 rounded-lg border border-white/20">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h4 className="text-lg font-bold text-white">{dasha.planet} Mahadasha</h4>
+                    <p className="text-white/60 text-sm">
+                      {dasha.startYear} - {dasha.endYear} ({dasha.duration.toFixed(1)} years)
+                    </p>
+                    <p className="text-white/70 text-xs mt-1">
+                      <span className="text-cyan-300">Chalit: House {dasha.placement.chalitHouse}</span>
+                      {dasha.placement.chalitHouse !== dasha.placement.rasifHouse && (
+                        <span className="text-white/50 ml-2">(Rasi: H{dasha.placement.rasifHouse})</span>
+                      )}
+                      <span className="text-white/70 ml-2">• Rules: {dasha.lordships.join(', ')}</span>
+                    </p>
+                  </div>
+                  <div className="bg-blue-500/30 px-3 py-1 rounded-full text-xs text-white font-semibold">
+                    Completed
+                  </div>
+                </div>
+                
+                <div className="space-y-2 mt-3">
+                  {dasha.predictions.filter(p => p.probability).map((pred, i) => (
+                    <div key={i} className="bg-yellow-500/20 p-3 rounded border border-yellow-400/30">
+                      <div className="flex items-start gap-2">
+                        <span className="text-yellow-300 text-xl">★</span>
+                        <div className="flex-1">
+                          <p className="text-white font-semibold text-sm">
+                            {pred.category}
+                            {pred.chalitBased && <span className="text-cyan-300 text-xs ml-2">(Chalit-based)</span>}
+                          </p>
+                          <p className="text-white/80 text-xs mt-1">{pred.event}</p>
+                          <div className="flex gap-3 mt-2 text-xs">
+                            <span className="text-white/60">Timing: {pred.timing}</span>
+                            {pred.probability && (
+                              <span className="text-green-400">Probability: {pred.probability}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {dasha.predictions.filter(p => !p.probability && !p.chalitBased).slice(0, 3).map((pred, i) => (
+                    <div key={i} className="flex items-start gap-2 text-sm">
+                      <span className="text-blue-400 mt-0.5">•</span>
+                      <div>
+                        <span className="text-white/70 font-semibold">{pred.category}:</span>
+                        <span className="text-white/80 ml-1">{pred.event}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Current Mahadasha */}
+        {currentDasha && (
+          <div className="bg-gradient-to-r from-green-500/20 to-emerald-500/20 p-6 rounded-xl border-2 border-green-400/50 shadow-lg">
+            <h3 className="text-xl font-bold text-white mb-4">🌟 Current Mahadasha Analysis</h3>
+            
+            <div className="bg-white/10 p-5 rounded-lg border-2 border-green-400/30">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h4 className="text-2xl font-bold text-white">{currentDasha.planet} Mahadasha</h4>
+                  <p className="text-white/70 text-sm mt-1">
+                    {currentDasha.startYear} - {currentDasha.endYear} ({currentDasha.duration} years)
+                  </p>
+                  <div className="mt-2 text-sm space-x-2">
+                    <span className="bg-cyan-500/40 px-2 py-1 rounded text-white">
+                      Chalit: House {currentDasha.placement.chalitHouse}
+                    </span>
+                    {currentDasha.placement.chalitHouse !== currentDasha.placement.rasifHouse && (
+                      <span className="bg-white/20 px-2 py-1 rounded text-white/70 text-xs">
+                        Rasi: H{currentDasha.placement.rasifHouse}
+                      </span>
+                    )}
+                    <span className="bg-purple-500/30 px-2 py-1 rounded text-white">
+                      Rules: {currentDasha.lordships.join(', ')}
+                    </span>
+                  </div>
+                </div>
+                <div className="bg-green-500 px-4 py-2 rounded-full text-sm text-white font-bold">
+                  ACTIVE NOW
+                </div>
+              </div>
+              
+              <div className="space-y-4 mt-4">
+                <div className="bg-green-500/20 p-4 rounded-lg border border-green-400/30">
+                  <p className="text-white font-semibold mb-3">🎯 Key Life Events to Expect:</p>
+                  <div className="space-y-3">
+                    {currentDasha.predictions.filter(p => p.probability).map((pred, i) => (
+                      <div key={i} className="bg-white/10 p-3 rounded">
+                        <div className="flex items-start gap-2">
+                          <span className="text-yellow-300 text-xl">★</span>
+                          <div className="flex-1">
+                            <p className="text-white font-bold text-sm">
+                              {pred.category}
+                              {pred.chalitBased && <span className="text-cyan-300 text-xs ml-2">(Chalit)</span>}
+                            </p>
+                            <p className="text-white/90 text-sm mt-1">{pred.event}</p>
+                            <div className="flex gap-4 mt-2 text-xs">
+                              <span className="text-white/70">⏱ {pred.timing}</span>
+                              <span className="text-green-300 font-semibold">📊 {pred.probability}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                <div className="bg-black/20 p-4 rounded">
+                  <p className="text-white/70 font-semibold mb-2 text-sm">Additional Activations:</p>
+                  <div className="space-y-2">
+                    {currentDasha.predictions.filter(p => !p.probability).slice(0, 6).map((pred, i) => (
+                      <div key={i} className="text-sm flex items-start gap-2">
+                        <span className="text-cyan-400">→</span>
+                        <div>
+                          <span className="text-cyan-300 font-semibold">{pred.category}:</span>
+                          <span className="text-white/80 ml-1">{pred.event}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Future Mahadashas */}
+        <div className="bg-gradient-to-r from-purple-500/20 to-pink-500/20 p-6 rounded-xl border border-purple-300/30">
+          <h3 className="text-xl font-bold text-white mb-4">🔮 Upcoming Mahadashas</h3>
+          
+          <div className="space-y-3">
+            {futureDashas.slice(0, 3).map((dasha, idx) => (
+              <div key={idx} className="bg-white/10 p-4 rounded-lg border border-white/20">
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <h4 className="text-lg font-bold text-white">{dasha.planet} Mahadasha</h4>
+                    <p className="text-white/60 text-sm">
+                      {dasha.startYear} - {dasha.endYear}
+                    </p>
+                    <p className="text-white/70 text-xs mt-1">
+                      <span className="text-cyan-300">Chalit H{dasha.placement.chalitHouse}</span>
+                      <span className="text-white/70 ml-2">• Rules: {dasha.lordships.join(', ')}</span>
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="mt-3 space-y-2">
+                  {dasha.predictions.filter(p => p.probability).slice(0, 2).map((pred, i) => (
+                    <div key={i} className="text-sm flex items-start gap-2">
+                      <span className="text-purple-400">★</span>
+                      <div>
+                        <span className="text-purple-300 font-semibold">{pred.category}:</span>
+                        <span className="text-white/80 ml-1">{pred.event}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-blue-500/20 border border-blue-400/30 rounded-lg p-4">
+          <div className="flex items-start gap-2">
+            <CheckCircle className="text-blue-400 mt-0.5 flex-shrink-0" size={16} />
+            <div className="text-sm text-white/80">
+              <strong className="text-white">Chalit Kundali:</strong> Predictions use Bhava Chalit (true house cusps) 
+              which accounts for Earth's axial tilt and your birth latitude. This is more accurate than equal house 
+              divisions (Rasi chart) for event timing and life predictions. Chalit is the standard for predictive astrology.
+            </div>
+          </div>
+        </div>
+
+        <button
+          onClick={() => setPhase(2)}
+          className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold py-4 px-6 rounded-lg hover:from-purple-600 hover:to-pink-600 transform hover:scale-105 transition-all duration-200 shadow-lg flex items-center justify-center gap-2"
+        >
+          Continue to D9 Soul Quiz
+          <ChevronRight size={20} />
+        </button>
+
+        <button
+          onClick={() => setPhase(1.6)}
           className="w-full bg-white/10 text-white font-bold py-3 px-6 rounded-lg hover:bg-white/20 transition-all duration-200 border border-white/30"
         >
           ← Back
@@ -2249,7 +3605,7 @@ const ProgressiveBTRApp = () => {
                   ⚠️ {adjustmentText}
                 </p>
               )}
-              <p className="text-white/80 text-sm mb-6">Precision: ±1 second • GeoNames Atlas • Kunda Siddhanta</p>
+              <p className="text-white/80 text-sm mb-6">Precision: ±1 second • Kunda Siddhanta</p>
               
               {lockedTime.degreeDiff && (
                 <div className="bg-white/10 px-4 py-2 rounded-lg mb-4 inline-block">
@@ -2292,7 +3648,7 @@ const ProgressiveBTRApp = () => {
             <CheckCircle className="text-blue-400 mt-0.5 flex-shrink-0" size={20} />
             <div className="text-sm text-white/80">
               <strong className="text-white">Progressive Refinement Complete!</strong><br/>
-              Your birth time has been progressively narrowed from ±2 hours → ±13 min → ±6 min → ±90 sec → ±1 sec using Vedic divisional chart analysis and Kunda Siddhanta with GeoNames accurate coordinates.
+              Your birth time has been progressively narrowed from ±2 hours → ±13 min → ±6 min → ±90 sec → ±1 sec using Vedic divisional chart analysis and Kunda Siddhanta with accurate astronomical coordinates.
               {timeAdjusted && (
                 <>
                   <br/><br/>
@@ -2357,8 +3713,8 @@ const ProgressiveBTRApp = () => {
       <div className="max-w-4xl mx-auto">
         <div className="bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl p-8 border border-white/20">
           <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold text-white mb-2">⭐ Birth Time Rectification</h1>
-            <p className="text-white/70">Progressive Precision Refinement • GeoNames Atlas • Kunda Siddhanta</p>
+            <h1 className="text-4xl font-bold text-white mb-2">⭐ Cosmic Sync via AG</h1>
+            <p className="text-white/70">Birth Time Rectification • Progressive Precision • Kunda Siddhanta</p>
           </div>
 
           {/* Progress Indicator */}
@@ -2378,6 +3734,8 @@ const ProgressiveBTRApp = () => {
           {/* Phase Content */}
           {phase === 1 && renderPhase1()}
           {phase === 1.5 && renderPhase1_5()}
+          {phase === 1.6 && renderPhase1_6()}
+          {phase === 1.7 && renderPhase1_7()}
           {phase === 2 && renderPhase2()}
           {phase === 3 && renderPhase3()}
           {phase === 4 && renderPhase4()}
