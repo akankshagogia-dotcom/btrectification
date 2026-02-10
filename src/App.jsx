@@ -5,7 +5,7 @@ const ProgressiveBTRApp = () => {
   // ====== DEVELOPMENT MODE CONFIGURATION ======
   // Set to false for production deployment (Vercel/Netlify)
   // Set to true for development in Claude or local testing
-  const DEV_MODE = true;
+  const DEV_MODE = false;
   
   // ====== MOCK DATA FOR DEVELOPMENT ======
   const MOCK_LOCATIONS = [
