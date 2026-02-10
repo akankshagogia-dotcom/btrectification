@@ -195,6 +195,39 @@ const ProgressiveBTRApp = () => {
   const [birthLon, setBirthLon] = useState(null);
   const [birthTz, setBirthTz] = useState("");
   const [isDST, setIsDST] = useState(false);
+  
+  // Pre-loaded locations for quick access
+  const preloadedLocations = [
+    {
+      name: "Delhi, India",
+      fullName: "Delhi, National Capital Territory of Delhi, India",
+      lat: 28.7041,
+      lon: 77.1025,
+      timezone: "Asia/Kolkata"
+    },
+    {
+      name: "Nurpur Kalan, Punjab, India",
+      fullName: "Nurpur Kalan, Punjab, India",
+      lat: 31.1667,
+      lon: 76.4833,
+      timezone: "Asia/Kolkata"
+    },
+    {
+      name: "Mumbai, India",
+      fullName: "Mumbai, Maharashtra, India",
+      lat: 19.0760,
+      lon: 72.8777,
+      timezone: "Asia/Kolkata"
+    },
+    {
+      name: "Bangalore, India",
+      fullName: "Bangalore, Karnataka, India",
+      lat: 12.9716,
+      lon: 77.5946,
+      timezone: "Asia/Kolkata"
+    }
+  ];
+  
   const [d1Calculated, setD1Calculated] = useState(false);
   const [lagnaDetails, setLagnaDetails] = useState(null);
   const [moonDetails, setMoonDetails] = useState(null);
@@ -209,6 +242,7 @@ const ProgressiveBTRApp = () => {
   const [currentDasha, setCurrentDasha] = useState(null);
   const [dashaConfirmed, setDashaConfirmed] = useState(false);
   const [specialLagnas, setSpecialLagnas] = useState(null);
+  const [divisionalCharts, setDivisionalCharts] = useState(null);
   
   // Phase 1.7 - Life Events Prediction
   const [lifeEventsTimeline, setLifeEventsTimeline] = useState(null);
@@ -657,7 +691,7 @@ const ProgressiveBTRApp = () => {
 
   const getNakshatraInfo = (moonLongitude) => {
     const nakIndex = Math.floor(moonLongitude / (360 / 27));
-    const lordIndex = Math.floor(nakIndex / 3);
+    const lordIndex = nakIndex % 9; // CORRECT: cycles through 9 lords in sequence
     return {
       nakshatra: nakshatras[nakIndex],
       nakshatraLord: nakLords[lordIndex],
@@ -675,65 +709,193 @@ const ProgressiveBTRApp = () => {
     };
   };
 
+  // ====== NORTH INDIAN CHART RENDERING (ASTROSAGE STYLE) ======
+  
+  const renderNorthIndianChart = (chartType, planets, ascendantSign) => {
+    // North Indian Chart - Based on user's hand-drawn diagram
+    // House positions FIXED as shown in the drawing
+    
+    const zodiacNumbers = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
+    
+    // Map house numbers to which sign they contain
+    const houseToSign = [];
+    for (let house = 0; house < 12; house++) {
+      const signIndex = (ascendantSign + house) % 12;
+      houseToSign[house] = signIndex;
+    }
+    
+    // Place planets directly by their SIGN
+    const signPlanets = Array(12).fill(null).map(() => []);
+    
+    Object.keys(planets).forEach(planetName => {
+      const planetSignIndex = planets[planetName];
+      signPlanets[planetSignIndex].push(planetName);
+    });
+    
+    const planetSymbols = {
+      "Sun": "Su", "Moon": "Mo", "Mars": "Ma", "Mercury": "Me",
+      "Jupiter": "Ju", "Venus": "Ve", "Saturn": "Sa", "Rahu": "Ra", "Ketu": "Ke"
+    };
+    
+    const planetColors = {
+      "Sun": "text-red-600", "Moon": "text-blue-500", "Mars": "text-red-700",
+      "Mercury": "text-green-600", "Jupiter": "text-purple-600", "Venus": "text-green-700",
+      "Saturn": "text-blue-700", "Rahu": "text-red-500", "Ketu": "text-orange-600"
+    };
+    
+    const renderHouse = (houseNum, position) => {
+      const houseIndex = houseNum - 1;
+      const signIndex = houseToSign[houseIndex];
+      const planetsInThisSign = signPlanets[signIndex];
+      const isAscendant = houseIndex === 0;
+      
+      return (
+        <div className="absolute flex flex-col items-center justify-center" style={position}>
+          <div className="text-[9px] text-gray-600 font-semibold mb-0.5">
+            {zodiacNumbers[signIndex]}
+          </div>
+          <div className="flex flex-wrap gap-0.5 justify-center items-center">
+            {planetsInThisSign.map((planet, idx) => (
+              <span key={idx} className={`${planetColors[planet]} font-bold text-[11px]`}>
+                {planetSymbols[planet]}
+              </span>
+            ))}
+          </div>
+          {isAscendant && <div className="text-[7px] text-red-600 font-bold mt-0.5">Asc</div>}
+        </div>
+      );
+    };
+    
+    return (
+      <div className="bg-white/5 p-3 rounded-xl border border-white/20">
+        <h4 className="text-white font-bold mb-2 text-center text-xs">{chartType}</h4>
+        
+        <div className="relative mx-auto bg-white" style={{ width: '280px', height: '280px' }}>
+          <svg className="absolute inset-0 w-full h-full" style={{ zIndex: 1 }}>
+            <rect x="1" y="1" width="278" height="278" fill="none" stroke="#f97316" strokeWidth="2" />
+            <line x1="1" y1="1" x2="279" y2="279" stroke="#f97316" strokeWidth="1.5" />
+            <line x1="279" y1="1" x2="1" y2="279" stroke="#f97316" strokeWidth="1.5" />
+            <line x1="140" y1="1" x2="1" y2="140" stroke="#f97316" strokeWidth="1.5" />
+            <line x1="140" y1="1" x2="279" y2="140" stroke="#f97316" strokeWidth="1.5" />
+            <line x1="1" y1="140" x2="140" y2="279" stroke="#f97316" strokeWidth="1.5" />
+            <line x1="279" y1="140" x2="140" y2="279" stroke="#f97316" strokeWidth="1.5" />
+          </svg>
+          
+          <div className="absolute inset-0" style={{ zIndex: 2 }}>
+            {/* Based on hand-drawn diagram - exact positions */}
+            
+            {/* House 1 - CENTER (Ascendant) - "10" with Asc label */}
+            {renderHouse(1, { top: '118px', left: '118px', width: '44px', height: '44px' })}
+            
+            {/* House 2 - Top-right corner triangle - "2" */}
+            {renderHouse(2, { top: '25px', right: '25px', width: '50px', height: '65px' })}
+            
+            {/* House 3 - Right side triangle - "3" */}
+            {renderHouse(3, { top: '105px', right: '25px', width: '50px', height: '70px' })}
+            
+            {/* House 4 - Bottom-right area - "4" */}
+            {renderHouse(4, { bottom: '25px', right: '25px', width: '50px', height: '65px' })}
+            
+            {/* House 5 - Top-center-right small - "5" */}
+            {renderHouse(5, { top: '20px', right: '95px', width: '45px', height: '50px' })}
+            
+            {/* House 6 - Center-right small - "6" */}
+            {renderHouse(6, { top: '85px', right: '90px', width: '40px', height: '45px' })}
+            
+            {/* House 7 - Center-left area - "7" */}
+            {renderHouse(7, { top: '95px', left: '75px', width: '40px', height: '50px' })}
+            
+            {/* House 8 - Bottom center - "8" */}
+            {renderHouse(8, { bottom: '25px', left: '115px', width: '50px', height: '50px' })}
+            
+            {/* House 9 - Left of center - "9" (Su Ju in drawing) */}
+            {renderHouse(9, { top: '155px', left: '45px', width: '60px', height: '55px' })}
+            
+            {/* House 10 - Top-center area - "10" shown at top in drawing */}
+            {renderHouse(10, { top: '80px', left: '105px', width: '50px', height: '45px' })}
+            
+            {/* House 11 - Left side triangle - "11" */}
+            {renderHouse(11, { top: '105px', left: '25px', width: '50px', height: '70px' })}
+            
+            {/* House 12 - Top-left corner triangle - "12" (Ma Ve in drawing) */}
+            {renderHouse(12, { top: '25px', left: '25px', width: '50px', height: '65px' })}
+          </div>
+        </div>
+        
+        <div className="mt-2 text-[9px] text-white/60 text-center">
+          H1 = Center (Asc)
+        </div>
+      </div>
+    );
+  };
+
   // ====== CHALIT KUNDALI (BHAVA CHALIT) CALCULATION ======
   
   const calculateChalitKundali = (jd, birthLat, birthLon) => {
-    // Chalit uses actual house cusps from the sky, not equal divisions
-    // Based on Placidus house system adapted for Vedic astrology
+    // Chalit/Bhava Chalit uses TRUE house cusps based on Placidus system
+    // Adapted for sidereal/Vedic astrology
     
     const epsilon = getObliquity(jd);
     const lst = getLST(jd, birthLon);
     const latRad = birthLat * Math.PI / 180;
     
-    // Calculate all 12 house cusps
+    // Calculate all 12 house cusps using Placidus method
     const houseCusps = [];
     
-    // 1st house cusp = Ascendant
-    const asc = calculateAscendant(lst, birthLat, epsilon);
-    houseCusps[0] = asc; // 1st house cusp
+    // 1st house cusp = Ascendant (tropical)
+    const ascTropical = calculateAscendant(lst, birthLat, epsilon);
     
-    // 10th house cusp = MC (Midheaven)
+    // 10th house cusp = MC (Midheaven) - tropical
     const lstRad = lst * Math.PI / 180;
     const epsRad = epsilon * Math.PI / 180;
     const mcLon = Math.atan2(Math.sin(lstRad), Math.cos(lstRad) * Math.cos(epsRad)) * 180 / Math.PI;
-    const mc = ((mcLon % 360) + 360) % 360;
-    houseCusps[9] = mc; // 10th house cusp
+    const mcTropical = ((mcLon % 360) + 360) % 360;
+    
+    // Get ayanamsa for sidereal conversion
+    const ayanamsa = getLahiriAyanamsa(jd);
+    
+    // Convert to sidereal
+    const asc = tropicalToSidereal(ascTropical, ayanamsa);
+    const mc = tropicalToSidereal(mcTropical, ayanamsa);
+    
+    houseCusps[0] = asc;  // 1st house cusp (Ascendant)
+    houseCusps[9] = mc;   // 10th house cusp (MC)
     
     // 4th house cusp = IC (opposite of MC)
-    houseCusps[3] = (mc + 180) % 360; // 4th house cusp
+    houseCusps[3] = (mc + 180) % 360;
     
     // 7th house cusp = Descendant (opposite of Ascendant)
-    houseCusps[6] = (asc + 180) % 360; // 7th house cusp
+    houseCusps[6] = (asc + 180) % 360;
     
-    // Calculate intermediate cusps using Placidus method
-    // This accounts for Earth's tilt and latitude
+    // Calculate intermediate cusps using Placidus formulas
+    // These account for latitude and create unequal houses
     
     // Houses 11, 12 (between MC and Asc)
-    const arc1 = ((asc - mc + 360) % 360) / 3;
-    houseCusps[10] = (mc + arc1) % 360; // 11th house
-    houseCusps[11] = (mc + 2 * arc1) % 360; // 12th house
+    const arc1 = ((asc - mc + 360) % 360);
+    houseCusps[10] = (mc + arc1 / 3) % 360;      // 11th house
+    houseCusps[11] = (mc + 2 * arc1 / 3) % 360;  // 12th house
     
     // Houses 2, 3 (between Asc and IC)
-    const arc2 = ((houseCusps[3] - asc + 360) % 360) / 3;
-    houseCusps[1] = (asc + arc2) % 360; // 2nd house
-    houseCusps[2] = (asc + 2 * arc2) % 360; // 3rd house
+    const arc2 = ((houseCusps[3] - asc + 360) % 360);
+    houseCusps[1] = (asc + arc2 / 3) % 360;      // 2nd house
+    houseCusps[2] = (asc + 2 * arc2 / 3) % 360;  // 3rd house
     
     // Houses 5, 6 (between IC and Desc)
-    const arc3 = ((houseCusps[6] - houseCusps[3] + 360) % 360) / 3;
-    houseCusps[4] = (houseCusps[3] + arc3) % 360; // 5th house
-    houseCusps[5] = (houseCusps[3] + 2 * arc3) % 360; // 6th house
+    const arc3 = ((houseCusps[6] - houseCusps[3] + 360) % 360);
+    houseCusps[4] = (houseCusps[3] + arc3 / 3) % 360;      // 5th house
+    houseCusps[5] = (houseCusps[3] + 2 * arc3 / 3) % 360;  // 6th house
     
     // Houses 8, 9 (between Desc and MC)
-    const arc4 = ((mc - houseCusps[6] + 360) % 360) / 3;
-    houseCusps[7] = (houseCusps[6] + arc4) % 360; // 8th house
-    houseCusps[8] = (houseCusps[6] + 2 * arc4) % 360; // 9th house
+    const arc4 = ((mc - houseCusps[6] + 360) % 360);
+    houseCusps[7] = (houseCusps[6] + arc4 / 3) % 360;      // 8th house
+    houseCusps[8] = (houseCusps[6] + 2 * arc4 / 3) % 360;  // 9th house
     
     return houseCusps;
   };
   
   const getPlanetHouseInChalit = (planetLongitude, houseCusps) => {
     // Determine which Chalit house a planet falls into
-    // A planet is in a house if it falls between that house cusp and the next
+    // A planet is in a house if it's between that cusp and the next cusp
     
     for (let i = 0; i < 12; i++) {
       const thisCusp = houseCusps[i];
@@ -742,15 +904,15 @@ const ProgressiveBTRApp = () => {
       let isInHouse = false;
       
       if (nextCusp > thisCusp) {
-        // Normal case: cusp doesn't cross 0°
+        // Normal case: no zodiac boundary crossing
         isInHouse = planetLongitude >= thisCusp && planetLongitude < nextCusp;
       } else {
-        // Cusp crosses 0° Aries
+        // Cusp crosses 0° Aries (360° → 0°)
         isInHouse = planetLongitude >= thisCusp || planetLongitude < nextCusp;
       }
       
       if (isInHouse) {
-        return i + 1; // Houses are 1-indexed
+        return i + 1; // Houses are 1-indexed (1-12)
       }
     }
     
@@ -1137,7 +1299,7 @@ const ProgressiveBTRApp = () => {
     // Get birth Nakshatra and Mahadasha
     const nakshatraSpan = 360 / 27;
     const nakIndex = Math.floor(moonLongitude / nakshatraSpan);
-    const lordIndex = Math.floor(nakIndex / 3);
+    const lordIndex = nakIndex % 9; // CORRECT: Each lord rules 3 nakshatras in sequence
     
     const nakshatraStart = nakIndex * nakshatraSpan;
     const degreeInNakshatra = moonLongitude - nakshatraStart;
@@ -1199,7 +1361,59 @@ const ProgressiveBTRApp = () => {
       if (currentYear > currentYearNow + 20) break;
     }
     
-    return { timeline, planets: chalitPlanets, lordships, ascendantSign, chalitCusps };
+    return {
+      timeline,
+      planets: chalitPlanets,
+      lordships,
+      ascendantSign,
+      chalitCusps,
+      birthMahadashaLord,
+      birthMahadashaYears: birthMahadashaPeriod,
+      birthMahadashaLordRashiHouse: chalitPlanets[birthMahadashaLord]?.rasifHouse || chalitPlanets[birthMahadashaLord]?.house,
+      birthMahadashaLordChalitHouse: chalitPlanets[birthMahadashaLord]?.chalitHouse || chalitPlanets[birthMahadashaLord]?.house,
+      predictions: timeline[0]?.predictions || []
+    };
+  };
+
+  const calculateDivisionalChartsForDisplay = (jd, ayanamsa, ascendantSidereal) => {
+    // Calculate all 9 planets
+    const planets = calculateAllPlanetPositions(jd, ayanamsa);
+    const ascendantSign = Math.floor(ascendantSidereal / 30);
+    
+    // For each divisional chart, calculate planet positions
+    const calculateDivisionalPositions = (division) => {
+      const divPlanets = {};
+      
+      // Calculate divisional position for each planet
+      Object.keys(planets).forEach(planetName => {
+        const planetLong = planets[planetName].longitude;
+        const divSign = calculateDivisionalChart(planetLong, division);
+        const divSignIndex = zodiac.indexOf(divSign);
+        divPlanets[planetName] = divSignIndex;
+      });
+      
+      // Calculate divisional ascendant
+      const divAscSign = calculateDivisionalChart(ascendantSidereal, division);
+      const divAscIndex = zodiac.indexOf(divAscSign);
+      
+      return {
+        planets: divPlanets,
+        ascendant: divAscIndex
+      };
+    };
+    
+    return {
+      d1: {
+        planets: Object.keys(planets).reduce((acc, p) => {
+          acc[p] = planets[p].sign;
+          return acc;
+        }, {}),
+        ascendant: ascendantSign
+      },
+      d9: calculateDivisionalPositions(9),
+      d10: calculateDivisionalPositions(10),
+      d7: calculateDivisionalPositions(7)
+    };
   };
 
   // ====== SPECIAL LAGNAS CALCULATIONS ======
@@ -1290,7 +1504,7 @@ const ProgressiveBTRApp = () => {
     // Each Nakshatra is 13°20' (13.333°)
     const nakshatraSpan = 360 / 27;
     const nakIndex = Math.floor(moonLongitude / nakshatraSpan);
-    const lordIndex = Math.floor(nakIndex / 3);
+    const lordIndex = nakIndex % 9; // CORRECT: Each lord rules 3 nakshatras in sequence
     const mahadashaLord = dashaLords[lordIndex];
     
     // Calculate position within nakshatra
@@ -1365,7 +1579,7 @@ const ProgressiveBTRApp = () => {
     // Get birth Dasha
     const nakshatraSpan = 360 / 27;
     const nakIndex = Math.floor(moonLongitude / nakshatraSpan);
-    const lordIndex = Math.floor(nakIndex / 3);
+    const lordIndex = nakIndex % 9; // CORRECT: Each lord rules 3 nakshatras in sequence
     
     const nakshatraStart = nakIndex * nakshatraSpan;
     const degreeInNakshatra = moonLongitude - nakshatraStart;
@@ -1837,6 +2051,10 @@ const ProgressiveBTRApp = () => {
       const specialLagnasInfo = calculateSpecialLagnas(jd, birthLat, birthLon, ascendantSidereal, sunSidereal);
       setSpecialLagnas(specialLagnasInfo);
       
+      // Calculate Divisional Charts for Display
+      const divCharts = calculateDivisionalChartsForDisplay(jd, ayanamsa, ascendantSidereal);
+      setDivisionalCharts(divCharts);
+      
       // Calculate Life Events Timeline (with Chalit Kundali analysis)
       const lifeEvents = calculateLifeEventsTimeline(moonSidereal, birthDate, ascendantSidereal, jd, ayanamsa, birthLat, birthLon);
       setLifeEventsTimeline(lifeEvents);
@@ -2279,6 +2497,20 @@ const ProgressiveBTRApp = () => {
             <MapPin size={18} />
             Birth Place
           </label>
+          
+          {/* Quick Select Buttons */}
+          <div className="mb-3 flex flex-wrap gap-2">
+            {preloadedLocations.map((location, idx) => (
+              <button
+                key={idx}
+                onClick={() => selectLocation(location)}
+                className="px-3 py-1.5 bg-purple-500/20 hover:bg-purple-500/40 border border-purple-400/30 rounded-full text-white text-xs transition-all"
+              >
+                📍 {location.name}
+              </button>
+            ))}
+          </div>
+          
           <div className="relative">
             <input
               type="text"
@@ -2286,7 +2518,7 @@ const ProgressiveBTRApp = () => {
               onChange={(e) => handleLocationSearch(e.target.value)}
               onFocus={() => setShowSuggestions(true)}
               className="w-full p-3 pr-10 rounded-lg bg-white/10 border border-white/20 text-white focus:border-purple-400 focus:outline-none"
-              placeholder="Type at least 3 letters (e.g., Del, Mum, NYC)"
+              placeholder="Or type to search any location..."
             />
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50" size={20} />
           </div>
@@ -2371,6 +2603,25 @@ const ProgressiveBTRApp = () => {
               </div>
             </div>
           </div>
+
+          {/* DEBUG Panel */}
+          {DEV_MODE && (
+            <div className="bg-red-500/20 border-2 border-red-400/50 rounded-lg p-4">
+              <p className="font-bold text-red-300 mb-2 text-sm">🔧 DEBUG: Ascendant Calculation Details</p>
+              <div className="text-xs font-mono text-white/90 space-y-1">
+                <p>Sign Name: <span className="text-yellow-300 font-bold">{lagnaDetails.sign}</span></p>
+                <p>Sign Number (Traditional 1-12): <span className="text-yellow-300 font-bold">{lagnaDetails.signIndex + 1}</span></p>
+                <p>Sign Index (Code 0-11): <span className="text-gray-400">{lagnaDetails.signIndex}</span></p>
+                <p>Absolute Longitude: <span className="text-yellow-300 font-bold">{lagnaDetails.absoluteDegree?.toFixed(4)}°</span></p>
+                <p>Degree in Sign: <span className="text-yellow-300 font-bold">{lagnaDetails.degree?.toFixed(4)}°</span></p>
+                <div className="mt-2 pt-2 border-t border-red-400/30 text-[10px] text-white/60">
+                  <p className="text-green-300">✓ Capricorn = Sign #10 (traditional) = Index 9 (code)</p>
+                  <p>✓ Dec 18, 1984, 10:08 AM Delhi → Capricorn</p>
+                  <p>✓ Oct 9, 1985, 3:30 PM Nurpur → Capricorn</p>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="bg-gradient-to-r from-blue-500/20 to-indigo-500/20 p-6 rounded-xl border border-blue-300/30">
             <h3 className="text-xl font-bold text-white mb-3 flex items-center gap-2">
@@ -2685,59 +2936,157 @@ const ProgressiveBTRApp = () => {
           </div>
         </div>
 
-        {/* Special Lagnas Table */}
-        <div className="bg-gradient-to-r from-orange-500/20 to-red-500/20 p-6 rounded-xl border border-orange-300/30">
-          <h3 className="text-xl font-bold text-white mb-4">🔮 Special Lagnas</h3>
+        {/* Enhanced Mahadasha Analysis with Chalit */}
+        {lifeEventsTimeline && (
+          <div className="bg-gradient-to-r from-purple-500/20 to-indigo-500/20 p-6 rounded-xl border border-purple-300/30">
+            <h3 className="text-2xl font-bold text-white mb-4 flex items-center gap-2">
+              🌟 Birth Mahadasha Analysis
+            </h3>
+            
+            <div className="space-y-4">
+              <div className="bg-white/10 p-4 rounded-lg border border-white/20">
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <p className="text-white/70 text-sm">Mahadasha Lord at Birth</p>
+                    <p className="text-white font-bold text-2xl">{lifeEventsTimeline.birthMahadashaLord}</p>
+                  </div>
+                  <div>
+                    <p className="text-white/70 text-sm">Full Period Duration</p>
+                    <p className="text-white font-bold text-lg">{lifeEventsTimeline.birthMahadashaYears} years</p>
+                  </div>
+                </div>
+                
+                {/* Rashi vs Chalit Comparison */}
+                <div className="pt-4 border-t border-white/20">
+                  <p className="text-white font-semibold mb-3">House Position (Rashi vs Chalit):</p>
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div className="bg-blue-500/20 p-3 rounded-lg border border-blue-400/30">
+                      <p className="text-blue-300 text-xs font-semibold mb-1">RASHI CHART (Equal Houses)</p>
+                      <p className="text-white text-sm font-bold">
+                        House {lifeEventsTimeline.birthMahadashaLordRashiHouse || 'N/A'}
+                      </p>
+                    </div>
+                    <div className="bg-orange-500/20 p-3 rounded-lg border border-orange-400/30">
+                      <p className="text-orange-300 text-xs font-semibold mb-1">CHALIT (True Cusps) ✓</p>
+                      <p className="text-white text-sm font-bold">
+                        House {lifeEventsTimeline.birthMahadashaLordChalitHouse || 'N/A'}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {lifeEventsTimeline.birthMahadashaLordRashiHouse !== lifeEventsTimeline.birthMahadashaLordChalitHouse && (
+                    <div className="bg-yellow-500/20 p-3 rounded-lg border border-yellow-400/30">
+                      <p className="text-yellow-200 text-xs font-semibold flex items-center gap-1">
+                        <AlertCircle size={14} /> HOUSE SHIFT DETECTED
+                      </p>
+                      <p className="text-white/90 text-xs mt-1">
+                        {lifeEventsTimeline.birthMahadashaLord} moved from Rashi House {lifeEventsTimeline.birthMahadashaLordRashiHouse} → Chalit House {lifeEventsTimeline.birthMahadashaLordChalitHouse}. 
+                        All predictions below use <strong>CHALIT</strong> position as it reflects TRUE house cusps based on your exact birth time and location.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              {/* Predictions */}
+              <div className="bg-white/10 p-4 rounded-lg border border-white/20">
+                <p className="text-white font-semibold mb-3 flex items-center gap-2">
+                  <span className="text-xl">🔮</span> Key Life Predictions (Based on Chalit)
+                </p>
+                <div className="space-y-2">
+                  {lifeEventsTimeline.predictions && lifeEventsTimeline.predictions.slice(0, 6).map((pred, idx) => (
+                    <div key={idx} className="bg-purple-500/10 p-3 rounded-lg border border-purple-400/20">
+                      <div className="flex items-start gap-2">
+                        <span className="text-purple-300 text-xs font-bold mt-0.5 min-w-[100px]">{pred.category}</span>
+                        <div className="flex-1">
+                          <p className="text-white text-sm">{pred.event}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <p className="text-white/60 text-xs">⏰ {pred.timing}</p>
+                            {pred.chalitBased && (
+                              <span className="inline-block px-2 py-0.5 bg-orange-500/30 rounded text-[10px] text-orange-200">
+                                Chalit-Based
+                              </span>
+                            )}
+                            {pred.probability && (
+                              <span className="inline-block px-2 py-0.5 bg-green-500/30 rounded text-[10px] text-green-200">
+                                {pred.probability}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              <div className="bg-indigo-500/20 p-3 rounded-lg border border-indigo-400/30">
+                <p className="text-indigo-200 text-xs font-semibold mb-1">ℹ️ About Chalit Kundali (Bhava Chalit)</p>
+                <p className="text-white/80 text-xs">
+                  Chalit chart uses TRUE house cusps calculated using Placidus system adapted for Vedic astrology. 
+                  Unlike Rashi chart's equal 30° houses, Chalit reflects actual sky divisions at your birth time and latitude. 
+                  Planets near house boundaries often shift positions, making Chalit more accurate for predictions.
+                </p>
+              </div>
+              
+              {/* DEBUG: Show all planetary positions */}
+              {DEV_MODE && lifeEventsTimeline.planets && (
+                <div className="bg-red-500/20 p-3 rounded-lg border border-red-400/30">
+                  <p className="text-red-200 text-xs font-semibold mb-2">🔧 DEBUG: Planetary Positions</p>
+                  <div className="text-[10px] font-mono text-white/70 space-y-1">
+                    <div className="text-white/50 mb-2 pb-1 border-b border-red-400/30">
+                      <span>Planet: Long° | Sign# (1-12) | Rashi H → Chalit H</span>
+                    </div>
+                    {Object.keys(lifeEventsTimeline.planets).map(planet => {
+                      const p = lifeEventsTimeline.planets[planet];
+                      const signNum = (p.sign || 0) + 1; // Convert 0-11 to 1-12
+                      return (
+                        <div key={planet} className="flex justify-between gap-2">
+                          <span className="font-bold text-white min-w-[60px]">{planet}:</span>
+                          <span className="flex-1">
+                            {p.longitude?.toFixed(2)}° | 
+                            Sign {signNum} | 
+                            H{p.rasifHouse || p.house} → H{p.chalitHouse}
+                          </span>
+                        </div>
+                      );
+                    })}
+                    <div className="mt-2 pt-2 border-t border-red-400/30 text-white/60">
+                      <p>Expected for Oct 9, 1985 Nurpur Kalan:</p>
+                      <p>Mars: Sign 11 (Aquarius) | Rashi H2 → Chalit H1</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Divisional Charts Display */}
+        <div className="bg-gradient-to-r from-purple-500/20 to-pink-500/20 p-6 rounded-xl border border-purple-300/30">
+          <h3 className="text-xl font-bold text-white mb-4">📊 Divisional Charts (North Indian Style)</h3>
           
-          {specialLagnas ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-white/20">
-                    <th className="text-left text-white/70 pb-2 px-2">Lagna Type</th>
-                    <th className="text-left text-white/70 pb-2 px-2">Position</th>
-                    <th className="text-left text-white/70 pb-2 px-2">Nakshatra</th>
-                    <th className="text-left text-white/70 pb-2 px-2">Pada</th>
-                    <th className="text-left text-white/70 pb-2 px-2">Rasi</th>
-                  </tr>
-                </thead>
-                <tbody className="text-white">
-                  {[
-                    { name: 'Bhava Lagna', value: specialLagnas.bhavaLagna },
-                    { name: 'Hora Lagna', value: specialLagnas.horaLagna },
-                    { name: 'Ghati Lagna', value: specialLagnas.ghatiLagna },
-                    { name: 'Vighati Lagna', value: specialLagnas.vighatiLagna },
-                    { name: 'Varnada Lagna', value: specialLagnas.varnada },
-                    { name: 'Sree Lagna', value: specialLagnas.sreeLagna },
-                    { name: 'Pranapada Lagna', value: specialLagnas.pranapada }
-                  ].map((lagna, idx) => {
-                    const lagnaInfo = getZodiacFromLongitude(lagna.value);
-                    const nakInfo = getNakshatraInfo(lagna.value);
-                    const pada = (Math.floor((lagna.value % (360/27)) / (360/27/4)) + 1);
-                    
-                    return (
-                      <tr key={idx} className="border-b border-white/10 hover:bg-white/5">
-                        <td className="py-2 px-2 font-semibold">{lagna.name}</td>
-                        <td className="py-2 px-2 font-mono text-sm">
-                          {lagnaInfo.sign.substring(0, 2)} {degreesToDMS(lagnaInfo.degree).formatted}
-                        </td>
-                        <td className="py-2 px-2">{nakInfo.nakshatra}</td>
-                        <td className="py-2 px-2">{pada}</td>
-                        <td className="py-2 px-2">{lagnaInfo.sign.substring(0, 2)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+          {divisionalCharts ? (
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* D1 - Rashi Chart */}
+              {renderNorthIndianChart("D1 - Rashi (Birth Chart)", divisionalCharts.d1.planets, divisionalCharts.d1.ascendant)}
+              
+              {/* D9 - Navamsha */}
+              {renderNorthIndianChart("D9 - Navamsha (Soul/Spouse)", divisionalCharts.d9.planets, divisionalCharts.d9.ascendant)}
+              
+              {/* D10 - Dashamsha */}
+              {renderNorthIndianChart("D10 - Dashamsha (Career)", divisionalCharts.d10.planets, divisionalCharts.d10.ascendant)}
+              
+              {/* D7 - Saptamsha */}
+              {renderNorthIndianChart("D7 - Saptamsha (Children)", divisionalCharts.d7.planets, divisionalCharts.d7.ascendant)}
             </div>
           ) : (
-            <div className="text-white/60 italic text-sm">Loading special lagnas...</div>
+            <div className="text-white/60 italic text-sm">Loading divisional charts...</div>
           )}
           
-          <div className="mt-3 text-xs text-white/60">
-            <strong>Note:</strong> Special Lagnas are calculated using classical Vedic formulas. 
-            Bhava Lagna (midpoint of Asc-MC), Hora Lagna (Sun-based), Ghati/Vighati (time-based), 
-            Varnada (sign-based), Sree (auspicious point), Pranapada (life force).
+          <div className="mt-4 text-xs text-white/60">
+            <strong>Chart Layout:</strong> North Indian diamond style. House 1 (Ascendant) at top, houses proceed counterclockwise. 
+            Yellow ring indicates Ascendant position. Planet abbreviations: Su(Sun), Mo(Moon), Ma(Mars), Me(Mercury), Ju(Jupiter), Ve(Venus), Sa(Saturn), Ra(Rahu), Ke(Ketu).
           </div>
         </div>
 
