@@ -5,7 +5,7 @@ const ProgressiveBTRApp = () => {
   // ====== DEVELOPMENT MODE CONFIGURATION ======
   // Set to false for production deployment (Vercel/Netlify)
   // Set to true for development in Claude or local testing
-  const DEV_MODE = false;
+  const DEV_MODE = true;
   
   // ====== MOCK DATA FOR DEVELOPMENT ======
   const MOCK_LOCATIONS = [
@@ -247,6 +247,9 @@ const ProgressiveBTRApp = () => {
   // Phase 1.7 - Life Events Prediction
   const [lifeEventsTimeline, setLifeEventsTimeline] = useState(null);
   
+  // Phase 1.8 - Moon Nakshatra Quiz
+  const [nakshatraConfirmed, setNakshatraConfirmed] = useState(null);
+  
   // Phase 2 - D9 Soul Quiz (±13 minutes)
   const [d9Selection, setD9Selection] = useState("");
   const [d9Confirmed, setD9Confirmed] = useState(null);
@@ -265,6 +268,8 @@ const ProgressiveBTRApp = () => {
   const [dashaEndDate, setDashaEndDate] = useState("");
   const [noMatchFound, setNoMatchFound] = useState(false);
   const [searchResults, setSearchResults] = useState(null);
+  const [kundaMethod, setKundaMethod] = useState("trinal"); // "trinal" or "divisional"
+  const [janmaNakshatraIndex, setJanmaNakshatraIndex] = useState(null);
   
   // Final Result
   const [lockedTime, setLockedTime] = useState(null);
@@ -692,10 +697,19 @@ const ProgressiveBTRApp = () => {
   const getNakshatraInfo = (moonLongitude) => {
     const nakIndex = Math.floor(moonLongitude / (360 / 27));
     const lordIndex = nakIndex % 9; // CORRECT: cycles through 9 lords in sequence
+    
+    // Calculate Pada (1-4)
+    // Each nakshatra spans 13°20' (13.333...°)
+    // Each pada is 1/4 of that = 3°20' (3.333...°)
+    const nakshatraStart = nakIndex * (360 / 27);
+    const degreeInNakshatra = moonLongitude - nakshatraStart;
+    const nakPada = Math.floor(degreeInNakshatra / (360 / 27 / 4)) + 1; // 1-based pada (1, 2, 3, 4)
+    
     return {
       nakshatra: nakshatras[nakIndex],
       nakshatraLord: nakLords[lordIndex],
-      nakIndex: nakIndex
+      nakIndex: nakIndex,
+      nakPada: nakPada
     };
   };
 
@@ -1650,6 +1664,210 @@ const ProgressiveBTRApp = () => {
     };
   };
 
+  const getNakshatraTraits = (nakshatra, pada) => {
+    const traits = {
+      "Ashwini": {
+        general: "Quick, spontaneous, healing abilities. Pioneering spirit with childlike enthusiasm. Natural healers and physicians. Impatient but action-oriented. Horse symbolism represents speed and vitality.",
+        pada1: "Aries Navamsa - Most impulsive and direct. Strong initiative, leadership qualities. May act without thinking.",
+        pada2: "Taurus Navamsa - More grounded and practical. Good with resources. Balances speed with stability.",
+        pada3: "Gemini Navamsa - Intellectual and communicative. Interest in multiple healing modalities. Quick learner.",
+        pada4: "Cancer Navamsa - Emotionally sensitive healer. Nurturing approach. Connection to traditional medicine."
+      },
+      "Bharani": {
+        general: "Intense, transformative energy. Bearer of souls between worlds. Strong creative and destructive power. Deeply sensual and passionate. Symbol: Yoni (womb) - creation and birth.",
+        pada1: "Leo Navamsa - Creative expression, dramatic. Natural performer. Strong ego and pride.",
+        pada2: "Virgo Navamsa - Service-oriented, perfectionist. Analytical about transformation. Healing through purification.",
+        pada3: "Libra Navamsa - Balanced approach to extremes. Artistic sensibility. Partnership-focused transformation.",
+        pada4: "Scorpio Navamsa - Most intense pada. Deepest transformation. Occult knowledge. Sexual energy prominent."
+      },
+      "Krittika": {
+        general: "Sharp, cutting, purifying through fire. Critical and perfectionist. Nurturing yet fierce. Symbol: Blade or flame. Mix of motherly care and warrior protection.",
+        pada1: "Sagittarius Navamsa - Philosophical cutter. Truth-seeker. Religious or spiritual pursuits. Righteous anger.",
+        pada2: "Capricorn Navamsa - Practical and ambitious. Cuts through to achieve goals. Career-focused. Disciplined.",
+        pada3: "Aquarius Navamsa - Humanitarian warrior. Fights for causes. Unconventional cutting insight. Technical skills.",
+        pada4: "Pisces Navamsa - Spiritual purification. Compassionate criticism. Artistic sensitivity. Mystical inclinations."
+      },
+      "Rohini": {
+        general: "Most fertile and creative nakshatra. Luxury-loving, materialistic in positive sense. Beautiful, charming, artistic. Moon's favorite wife. Symbol: Cart/chariot - material growth.",
+        pada1: "Aries Navamsa - Dynamic creativity. Pioneering in arts. Competitive in beauty. Quick manifestation.",
+        pada2: "Taurus Navamsa - Most luxurious pada. Love of comfort and beauty. Financial acumen. Sensual pleasures.",
+        pada3: "Gemini Navamsa - Intellectual creativity. Communication skills. Versatile artistic expression. Business-minded.",
+        pada4: "Cancer Navamsa - Emotional depth in creativity. Nurturing through beauty. Family-oriented wealth. Moody."
+      },
+      "Mrigashira": {
+        general: "Searching, curious, restless. Deer symbolism - gentle yet elusive. Constantly seeking something. Romantic and idealistic. Good at research and investigation.",
+        pada1: "Leo Navamsa - Searching for recognition. Creative pursuits. Proud yet seeking. Leadership through exploration.",
+        pada2: "Virgo Navamsa - Analytical searcher. Research-oriented. Perfectionist in quest. Health and service focus.",
+        pada3: "Libra Navamsa - Searching for perfect partnership. Diplomatic. Artistic sensitivity. Relationship-focused quest.",
+        pada4: "Scorpio Navamsa - Deep psychological searching. Occult investigations. Intense emotional quest. Transformative."
+      },
+      "Ardra": {
+        general: "Storm energy. Destructive transformation for renewal. Tears of sorrow and compassion. Rahu-ruled - unconventional. Symbol: Teardrop. Intensity and emotional storms.",
+        pada1: "Sagittarius Navamsa - Philosophical storms. Breaking old beliefs. Revolutionary thinking. Travel during upheaval.",
+        pada2: "Capricorn Navamsa - Structural destruction/rebuilding. Career upheavals. Ambitious through chaos. Practical transformation.",
+        pada3: "Aquarius Navamsa - Scientific mindset. Technical innovation through crisis. Humanitarian after storms. Unconventional.",
+        pada4: "Pisces Navamsa - Spiritual dissolution. Compassion through suffering. Mystical experiences. Emotional healing."
+      },
+      "Punarvasu": {
+        general: "Return to light after darkness. Optimistic, philosophical. Symbol: Quiver of arrows - abundant resources. Jupiter-ruled renewal. Spiritual restoration and hope.",
+        pada1: "Aries Navamsa - Energetic return. Quick recovery. Pioneering after setbacks. Warrior spirit renewed.",
+        pada2: "Taurus Navamsa - Material restoration. Financial recovery. Stable renewal. Building after loss.",
+        pada3: "Gemini Navamsa - Intellectual renewal. Communication after silence. Versatile recovery. Learning from failures.",
+        pada4: "Cancer Navamsa - Emotional healing. Family reunion. Nurturing restoration. Home as sanctuary."
+      },
+      "Pushya": {
+        general: "Most auspicious nakshatra. Nourishing, nurturing, spiritual growth. Priestly energy. Symbol: Cow's udder - nourishment. Saturn's exaltation point - discipline with care.",
+        pada1: "Leo Navamsa - Noble nurturer. Generous leadership. Spiritual pride. Creative nourishment.",
+        pada2: "Virgo Navamsa - Practical service. Health and nutrition focus. Analytical care. Perfectionist helper.",
+        pada3: "Libra Navamsa - Balanced giving. Diplomatic nurturer. Relationship harmony. Artistic service.",
+        pada4: "Scorpio Navamsa - Intense devotion. Transformative care. Occult spirituality. Deep emotional nourishment."
+      },
+      "Ashlesha": {
+        general: "Serpent energy. Hypnotic, manipulative (positive or negative). Kundalini power. Psychological depth. Symbol: Coiled serpent. Mercury-ruled mental intensity.",
+        pada1: "Sagittarius Navamsa - Philosophical manipulation. Teaching through influence. Expanding consciousness. Ethical concerns.",
+        pada2: "Capricorn Navamsa - Strategic and ambitious. Power through position. Controlled intensity. Political acumen.",
+        pada3: "Aquarius Navamsa - Mass psychology. Technical manipulation. Unconventional influence. Humanitarian control.",
+        pada4: "Pisces Navamsa - Psychic sensitivity. Spiritual hypnosis. Dissolving boundaries. Compassionate manipulation."
+      },
+      "Magha": {
+        general: "Royal, ancestral pride. Connection to pitris (ancestors). Majestic presence. Ketu-ruled spirituality through heritage. Symbol: Throne room. Legacy and tradition.",
+        pada1: "Aries Navamsa - Warrior king. Dynamic leadership. Pioneering lineage. Impulsive royalty.",
+        pada2: "Taurus Navamsa - Stable royalty. Material legacy. Traditional wealth. Fixed in ancestral ways.",
+        pada3: "Gemini Navamsa - Intellectual lineage. Communication of heritage. Versatile nobility. Mental pride.",
+        pada4: "Cancer Navamsa - Emotional connection to ancestors. Family throne. Nurturing legacy. Home as palace."
+      },
+      "Purva Phalguni": {
+        general: "Creative enjoyment, procreation. Venus-ruled luxury and pleasure. Symbol: Front legs of bed - rest and romance. Artistic, musical, relationship-focused.",
+        pada1: "Leo Navamsa - Creative expression peaks. Dramatic romance. Performing arts. Pride in pleasure.",
+        pada2: "Virgo Navamsa - Analytical in pleasure. Health-conscious enjoyment. Service through art. Critical of beauty.",
+        pada3: "Libra Navamsa - Perfect partnership. Diplomatic charm. Balanced pleasure. Refined artistic taste.",
+        pada4: "Scorpio Navamsa - Intense passion. Transformative relationships. Deep creative power. Obsessive love."
+      },
+      "Uttara Phalguni": {
+        general: "Patronage, support, leadership through service. Sun-ruled nobility. Symbol: Back legs of bed - final rest. Charitable, friendly, helpful nature.",
+        pada1: "Sagittarius Navamsa - Generous leader. Philosophical patronage. Teaching and guidance. Righteous support.",
+        pada2: "Capricorn Navamsa - Structured support. Career advancement. Responsible leadership. Practical help.",
+        pada3: "Aquarius Navamsa - Humanitarian leadership. Innovative support. Network builder. Unconventional patronage.",
+        pada4: "Pisces Navamsa - Compassionate leadership. Spiritual support. Artistic patronage. Selfless service."
+      },
+      "Hasta": {
+        general: "Skillful hands. Manual dexterity, craftsmanship. Moon-ruled creativity. Symbol: Hand/palm. Healing touch, magic, trickery. Quick-witted and clever.",
+        pada1: "Aries Navamsa - Quick hands. Impulsive creation. Dynamic craftsmanship. Competitive skills.",
+        pada2: "Taurus Navamsa - Artistic hands. Material creation. Steady craftsmanship. Financial skills.",
+        pada3: "Gemini Navamsa - Versatile skills. Communication through hands. Writing, typing. Mental dexterity.",
+        pada4: "Cancer Navamsa - Nurturing hands. Cooking, caring. Emotional craftsmanship. Healing touch."
+      },
+      "Chitra": {
+        general: "Brilliant, colorful, creative genius. Mars-ruled dynamic energy. Symbol: Bright jewel/pearl. Architecture, design, beauty. Charismatic personality.",
+        pada1: "Leo Navamsa - Creative brilliance. Dramatic beauty. Artistic pride. Shining personality.",
+        pada2: "Virgo Navamsa - Perfectionist designer. Technical artistry. Analytical beauty. Health aesthetics.",
+        pada3: "Libra Navamsa - Balanced beauty. Diplomatic charm. Partnership in creation. Refined taste.",
+        pada4: "Scorpio Navamsa - Intense creativity. Transformative design. Mysterious beauty. Occult aesthetics."
+      },
+      "Swati": {
+        general: "Independent, freedom-loving. Rahu-ruled innovation. Symbol: Sword/young plant in wind - flexibility. Business acumen, trade. Diplomatic yet restless.",
+        pada1: "Sagittarius Navamsa - Philosophical independence. Travel and exploration. Teaching freedom. Ethical business.",
+        pada2: "Capricorn Navamsa - Structured independence. Business success. Practical flexibility. Career autonomy.",
+        pada3: "Aquarius Navamsa - Ultimate freedom. Innovative thinking. Technical business. Humanitarian trade.",
+        pada4: "Pisces Navamsa - Spiritual independence. Compassionate business. Artistic flexibility. Mystical freedom."
+      },
+      "Vishakha": {
+        general: "Determined, goal-oriented. Jupiter-ruled purposeful energy. Symbol: Triumphal archway. Fork in road - choices. Intense focus once goal is set.",
+        pada1: "Aries Navamsa - Warrior determination. Dynamic goals. Competitive drive. Impulsive focus.",
+        pada2: "Taurus Navamsa - Material goals. Financial determination. Stable pursuit. Building wealth.",
+        pada3: "Gemini Navamsa - Intellectual goals. Communication focus. Multiple objectives. Mental determination.",
+        pada4: "Cancer Navamsa - Emotional goals. Family objectives. Nurturing determination. Home focus."
+      },
+      "Anuradha": {
+        general: "Devotion, friendship, following the path. Saturn-ruled discipline. Symbol: Lotus - blooming despite muddy waters. International connections. Success through cooperation.",
+        pada1: "Leo Navamsa - Loyal leadership. Devoted to purpose. Generous friendship. Noble path.",
+        pada2: "Virgo Navamsa - Practical devotion. Service-oriented friendship. Analytical path. Health discipline.",
+        pada3: "Libra Navamsa - Balanced devotion. Diplomatic friendship. Partnership path. Harmonious cooperation.",
+        pada4: "Scorpio Navamsa - Intense devotion. Transformative friendship. Occult path. Deep loyalty."
+      },
+      "Jyeshtha": {
+        general: "Eldest, chief, protective power. Mercury-ruled authority. Symbol: Umbrella/earring - protection. Occult knowledge. Battles and confrontation. Hidden depths.",
+        pada1: "Sagittarius Navamsa - Philosophical authority. Protective teaching. Righteous battles. Expanding power.",
+        pada2: "Capricorn Navamsa - Executive power. Career authority. Structural protection. Ambitious leadership.",
+        pada3: "Aquarius Navamsa - Unconventional authority. Technical protection. Innovative power. Humanitarian battles.",
+        pada4: "Pisces Navamsa - Spiritual authority. Compassionate protection. Mystical power. Dissolving ego."
+      },
+      "Mula": {
+        general: "Root, foundation, investigation. Ketu-ruled dissolution. Symbol: Tied bunch of roots. Destruction for rebirth. Philosophical depth. Penetrating to core truth.",
+        pada1: "Sagittarius Navamsa - Philosophical roots. Spiritual investigation. Teaching foundations. Travel to origins.",
+        pada2: "Capricorn Navamsa - Structural foundations. Career roots. Practical investigation. Building from ground up.",
+        pada3: "Aquarius Navamsa - Unconventional roots. Technical investigation. Humanitarian foundations. Breaking traditions.",
+        pada4: "Pisces Navamsa - Spiritual roots. Mystical investigation. Compassionate dissolution. Universal foundations."
+      },
+      "Purva Ashadha": {
+        general: "Invincible, cannot be defeated. Venus-ruled creative power. Symbol: Elephant tusk/fan - strength and luxury. Early victory. Purification before battle.",
+        pada1: "Sagittarius Navamsa - Philosophical invincibility. Teaching victories. Righteous conquest. Spiritual strength.",
+        pada2: "Capricorn Navamsa - Career invincibility. Practical victories. Structured conquest. Ambitious strength.",
+        pada3: "Aquarius Navamsa - Innovative invincibility. Technical victories. Unconventional conquest. Humanitarian strength.",
+        pada4: "Pisces Navamsa - Spiritual invincibility. Compassionate victories. Mystical conquest. Surrendering to win."
+      },
+      "Uttara Ashadha": {
+        general: "Final victory, righteousness. Sun-ruled nobility. Symbol: Elephant tusk - penetrating power. Universal principles. Leadership through dharma.",
+        pada1: "Sagittarius Navamsa - Complete victory. Philosophical righteousness. Teaching dharma. Final knowledge.",
+        pada2: "Capricorn Navamsa - Career culmination. Practical righteousness. Structured victory. Disciplined nobility.",
+        pada3: "Aquarius Navamsa - Universal victory. Humanitarian righteousness. Innovative dharma. Network success.",
+        pada4: "Pisces Navamsa - Spiritual victory. Compassionate righteousness. Mystical dharma. Transcendent nobility."
+      },
+      "Shravana": {
+        general: "Listening, learning, connecting. Moon-ruled receptivity. Symbol: Ear - hearing and communication. Education, counseling. Social networks and information gathering.",
+        pada1: "Aries Navamsa - Active listening. Quick learning. Pioneering communication. Impulsive connections.",
+        pada2: "Taurus Navamsa - Practical listening. Material learning. Stable communication. Financial networks.",
+        pada3: "Gemini Navamsa - Intellectual listening. Versatile learning. Multiple communications. Diverse networks.",
+        pada4: "Cancer Navamsa - Emotional listening. Intuitive learning. Nurturing communication. Family networks."
+      },
+      "Dhanishta": {
+        general: "Wealth, music, rhythm. Mars-ruled dynamic prosperity. Symbol: Drum - sound and timing. Fame and recognition. Group activities and performance.",
+        pada1: "Leo Navamsa - Creative fame. Dramatic wealth. Performance pride. Royal recognition.",
+        pada2: "Virgo Navamsa - Practical wealth. Analytical music. Service recognition. Health rhythms.",
+        pada3: "Libra Navamsa - Balanced prosperity. Artistic music. Partnership fame. Diplomatic recognition.",
+        pada4: "Scorpio Navamsa - Hidden wealth. Intense music. Transformative fame. Occult rhythms."
+      },
+      "Shatabhisha": {
+        general: "Hundred healers. Rahu-ruled unconventional healing. Symbol: Empty circle - thousand petaled lotus. Secrecy, mysticism. Solitary and philosophical.",
+        pada1: "Sagittarius Navamsa - Philosophical healing. Teaching medicine. Spiritual cures. Travel for health.",
+        pada2: "Capricorn Navamsa - Practical healing. Career in medicine. Structured treatment. Ambitious doctor.",
+        pada3: "Aquarius Navamsa - Innovative healing. Technical medicine. Unconventional cures. Humanitarian health.",
+        pada4: "Pisces Navamsa - Mystical healing. Spiritual medicine. Compassionate cures. Psychic abilities."
+      },
+      "Purva Bhadrapada": {
+        general: "Burning, purification through fire. Jupiter-ruled transformation. Symbol: Front legs of funeral cot. Dark philosophy. Intensity and cynicism turning to faith.",
+        pada1: "Aries Navamsa - Warrior transformation. Dynamic purification. Impulsive intensity. Quick burning.",
+        pada2: "Taurus Navamsa - Material purification. Stable transformation. Financial intensity. Practical burning.",
+        pada3: "Gemini Navamsa - Intellectual purification. Mental transformation. Versatile intensity. Communicating darkness.",
+        pada4: "Cancer Navamsa - Emotional purification. Nurturing transformation. Sensitive intensity. Family burning."
+      },
+      "Uttara Bhadrapada": {
+        general: "Final liberation. Saturn-ruled discipline toward moksha. Symbol: Back legs of funeral cot. Depth, patience, wisdom. Snake symbolism - kundalini rising.",
+        pada1: "Leo Navamsa - Creative liberation. Noble wisdom. Generous depth. Spiritual pride.",
+        pada2: "Virgo Navamsa - Practical liberation. Service wisdom. Analytical depth. Health discipline.",
+        pada3: "Libra Navamsa - Balanced liberation. Partnership wisdom. Diplomatic depth. Harmonious moksha.",
+        pada4: "Scorpio Navamsa - Complete transformation. Occult wisdom. Intense depth. Ultimate liberation."
+      },
+      "Revati": {
+        general: "Nourishment, wealth, final journey. Mercury-ruled completion. Symbol: Drum/fish - swimming in ocean of consciousness. Safe travel, protection. Compassionate and mystical.",
+        pada1: "Aries Navamsa - Dynamic completion. Quick journey. Pioneering compassion. Impulsive giving.",
+        pada2: "Taurus Navamsa - Material nourishment. Stable journey. Practical compassion. Financial protection.",
+        pada3: "Gemini Navamsa - Intellectual completion. Communicative journey. Versatile compassion. Mental protection.",
+        pada4: "Cancer Navamsa - Emotional nourishment. Family journey. Nurturing compassion. Ultimate protection."
+      }
+    };
+    
+    const nakData = traits[nakshatra];
+    if (!nakData) return "Character traits information not available for this Nakshatra.";
+    
+    const padaText = pada === 1 ? nakData.pada1 : pada === 2 ? nakData.pada2 : pada === 3 ? nakData.pada3 : nakData.pada4;
+    
+    return {
+      general: nakData.general,
+      pada: padaText
+    };
+  };
+
   const getD1LagnaTraits = (sign) => {
     const traits = {
       "Aries": "Personality: Bold, pioneering, energetic leader. You take initiative and love challenges. Impulsive, competitive, independent. You're a natural trailblazer who acts first and thinks later. Strong physical energy and courage. Direct communication style.",
@@ -1832,6 +2050,9 @@ const ProgressiveBTRApp = () => {
     setD1LagnaConfirmed(null);
     setD1LagnaSelection("");
     
+    // Phase 1.8 - Moon Nakshatra Confirmation
+    setNakshatraConfirmed(null);
+    
     // Phase 2 - D9
     setD9Selection("");
     setD9Confirmed(null);
@@ -1850,6 +2071,8 @@ const ProgressiveBTRApp = () => {
     setDashaEndDate("");
     setNoMatchFound(false);
     setSearchResults(null);
+    setKundaMethod("trinal"); // Reset to default trinal method
+    setJanmaNakshatraIndex(null);
     
     // Final Result
     setLockedTime(null);
@@ -2033,8 +2256,9 @@ const ProgressiveBTRApp = () => {
         absoluteDegree: moonSidereal
       });
       
-      // Set Moon Rashi for Kunda Siddhanta (Phase 5)
+      // Set Moon Rashi and Janma Nakshatra for Kunda Siddhanta (Phase 5)
       setMoonRashiSelection(moonInfo.sign);
+      setJanmaNakshatraIndex(nakInfo.nakIndex); // Store for trinal Kunda matching
       
       // Calculate Sun position
       const sunTropical = calculateSunPosition(jd);
@@ -2092,6 +2316,278 @@ const ProgressiveBTRApp = () => {
     setD7Confirmed(d7Selection);
     setTimeWindow(1.5);
     setPhase(5);
+  };
+
+  // ====== KUNDA SIDDHANTA - TRINAL METHOD ======
+  
+  /**
+   * Kunda Siddhanta using Trinal Nakshatra Matching
+   * Formula: (Lagna × 81) % 360 should give a Nakshatra that is:
+   * - Same as Janma Nakshatra (1st)
+   * - OR 10th from it (Janma + 9)
+   * - OR 19th from it (Janma + 18)
+   * These form a "trinal" (trikona) relationship
+   */
+  const handleKundaLockTrinal = (expandedWindow = 0) => {
+    if (processing) return;
+    if (!moonDetails || janmaNakshatraIndex === null) {
+      alert("Janma Nakshatra information not available");
+      return;
+    }
+
+    setProcessing(true);
+    setNoMatchFound(false);
+    setSearchResults(null);
+    
+    setTimeout(async () => {
+      // Parse time components including seconds
+      const timeParts = birthTime.split(':');
+      const hours = parseInt(timeParts[0]) || 0;
+      const minutes = parseInt(timeParts[1]) || 0;
+      const seconds = parseInt(timeParts[2]) || 0;
+      
+      // Progressive window expansion
+      let windowSeconds;
+      let windowLabel;
+      
+      if (expandedWindow === 0) {
+        windowSeconds = 10;  // ±10 seconds for trinal method (less precise)
+        windowLabel = "±10 seconds";
+      } else if (expandedWindow === 1) {
+        windowSeconds = 300;
+        windowLabel = "±5 minutes";
+      } else if (expandedWindow === 999) {
+        windowSeconds = 12 * 3600;
+        windowLabel = "±12 hours (entire day)";
+      } else {
+        windowSeconds = 300 + ((expandedWindow - 1) * 300);
+        windowLabel = `±${windowSeconds / 60} minutes`;
+      }
+      
+      const centerSeconds = hours * 3600 + minutes * 60 + seconds;
+      const stepSize = 1; // Check every second
+      
+      let candidates = [];
+      let debugInfo = {
+        total: 0,
+        trinalMatches: 0,
+        kundaNak1stMatches: 0,   // Same as Janma
+        kundaNak10thMatches: 0,  // 10th from Janma
+        kundaNak19thMatches: 0   // 19th from Janma
+      };
+      
+      // Calculate target Nakshatras (trinal relationship)
+      const targetNak1st = janmaNakshatraIndex;
+      const targetNak10th = (janmaNakshatraIndex + 9) % 27;
+      const targetNak19th = (janmaNakshatraIndex + 18) % 27;
+      
+      console.log("🕉️ KUNDA SIDDHANTA - TRINAL METHOD");
+      console.log("Janma Nakshatra:", nakshatras[janmaNakshatraIndex], `(index ${janmaNakshatraIndex})`);
+      console.log("Target Trinal Nakshatras:");
+      console.log(`  1st (Same): ${nakshatras[targetNak1st]} (index ${targetNak1st})`);
+      console.log(`  10th: ${nakshatras[targetNak10th]} (index ${targetNak10th})`);
+      console.log(`  19th: ${nakshatras[targetNak19th]} (index ${targetNak19th})`);
+      console.log("Window:", windowLabel);
+      console.log("");
+      
+      for (let offset = -windowSeconds; offset <= windowSeconds; offset += stepSize) {
+        const testTotalSeconds = centerSeconds + offset;
+        
+        // Handle time boundaries
+        let testHours = Math.floor(testTotalSeconds / 3600);
+        let testMinutes = Math.floor((testTotalSeconds % 3600) / 60);
+        let testSecs = testTotalSeconds % 60;
+        
+        if (testSecs < 0) {
+          testSecs += 60;
+          testMinutes -= 1;
+        }
+        if (testMinutes < 0) {
+          testMinutes += 60;
+          testHours -= 1;
+        }
+        if (testHours < 0) {
+          testHours += 24;
+        }
+        
+        testHours = testHours % 24;
+        debugInfo.total++;
+        
+        // Convert to UTC
+        const [year, month, day] = birthDate.split('-').map(Number);
+        const tzOffsetMap = {
+          'Asia/Kolkata': 5.5,
+          'Australia/Adelaide': 9.5,
+          'Australia/Sydney': 10,
+          'Australia/Melbourne': 10,
+          'Australia/Brisbane': 10,
+          'Australia/Perth': 8,
+          'America/New_York': -5,
+          'Europe/London': 0,
+          'Asia/Tokyo': 9,
+          'Europe/Paris': 1
+        };
+        
+        let utcOffset = tzOffsetMap[birthTz] || 0;
+        
+        // DST detection
+        const dstZones = {
+          'Australia/Adelaide': 1,
+          'Australia/Sydney': 1,
+          'Australia/Melbourne': 1,
+          'America/New_York': 1,
+          'Europe/London': 1,
+          'Europe/Paris': 1
+        };
+        
+        if (dstZones[birthTz]) {
+          if (birthTz.startsWith('Australia/') && 
+              ['Adelaide', 'Sydney', 'Melbourne'].some(city => birthTz.includes(city))) {
+            if (month >= 10 || month <= 4) {
+              utcOffset += dstZones[birthTz];
+            }
+          } else if (birthTz === 'America/New_York') {
+            if (month >= 3 && month <= 11) {
+              utcOffset += dstZones[birthTz];
+            }
+          } else if (birthTz.startsWith('Europe/')) {
+            if (month >= 3 && month <= 10) {
+              utcOffset += dstZones[birthTz];
+            }
+          }
+        }
+        
+        let utcHours = testHours - utcOffset;
+        let utcDay = day;
+        let utcMonth = month;
+        let utcYear = year;
+        
+        // Handle day boundary crossing
+        if (utcHours < 0) {
+          utcHours += 24;
+          utcDay -= 1;
+          if (utcDay < 1) {
+            utcMonth -= 1;
+            if (utcMonth < 1) {
+              utcMonth = 12;
+              utcYear -= 1;
+            }
+            const daysInPrevMonth = new Date(utcYear, utcMonth, 0).getDate();
+            utcDay = daysInPrevMonth;
+          }
+        } else if (utcHours >= 24) {
+          utcHours -= 24;
+          utcDay += 1;
+          const daysInMonth = new Date(utcYear, utcMonth, 0).getDate();
+          if (utcDay > daysInMonth) {
+            utcDay = 1;
+            utcMonth += 1;
+            if (utcMonth > 12) {
+              utcMonth = 1;
+              utcYear += 1;
+            }
+          }
+        }
+        
+        // Calculate Lagna for this time point
+        const jd = getJulianDay(utcYear, utcMonth, utcDay, utcHours, testMinutes, testSecs);
+        const epsilon = getObliquity(jd);
+        const lst = getLST(jd, birthLon);
+        const ascendantTropical = calculateAscendant(lst, birthLat, epsilon);
+        const ayanamsa = getLahiriAyanamsa(jd);
+        const ascendantSidereal = tropicalToSidereal(ascendantTropical, ayanamsa);
+        const lagnaInfo = getZodiacFromLongitude(ascendantSidereal);
+        
+        // KUNDA SIDDHANTA FORMULA: (Lagna × 81) % 360
+        const lagnaDegrees = ascendantSidereal;
+        const kundaProduct = (lagnaDegrees * 81) % 360;
+        const kundaNakshatraIndex = Math.floor(kundaProduct / (360 / 27));
+        
+        // Check for TRINAL MATCH (1st, 10th, or 19th Nakshatra)
+        const isTrinal1st = kundaNakshatraIndex === targetNak1st;
+        const isTrinal10th = kundaNakshatraIndex === targetNak10th;
+        const isTrinal19th = kundaNakshatraIndex === targetNak19th;
+        const isTrinal = isTrinal1st || isTrinal10th || isTrinal19th;
+        
+        // Track matches
+        if (isTrinal1st) debugInfo.kundaNak1stMatches++;
+        if (isTrinal10th) debugInfo.kundaNak10thMatches++;
+        if (isTrinal19th) debugInfo.kundaNak19thMatches++;
+        if (isTrinal) debugInfo.trinalMatches++;
+        
+        if (isTrinal) {
+          const timeStr = `${String(testHours).padStart(2, '0')}:${String(testMinutes).padStart(2, '0')}:${String(Math.abs(testSecs)).padStart(2, '0')}`;
+          
+          let trinalType = "";
+          if (isTrinal1st) trinalType = "1st (Same as Janma)";
+          else if (isTrinal10th) trinalType = "10th from Janma";
+          else if (isTrinal19th) trinalType = "19th from Janma";
+          
+          console.log(`✅ TRINAL MATCH at ${timeStr}:`);
+          console.log(`  Lagna: ${lagnaInfo.sign} ${lagnaDegrees.toFixed(3)}°`);
+          console.log(`  Kunda Product: (${lagnaDegrees.toFixed(3)}° × 81) % 360 = ${kundaProduct.toFixed(3)}°`);
+          console.log(`  Kunda Nakshatra: ${nakshatras[kundaNakshatraIndex]} (index ${kundaNakshatraIndex})`);
+          console.log(`  Trinal Type: ${trinalType}`);
+          
+          candidates.push({
+            time: timeStr,
+            offset: offset,
+            lagna: lagnaInfo,
+            lagnaDegrees: lagnaDegrees,
+            kundaProduct: kundaProduct,
+            kundaNakshatra: nakshatras[kundaNakshatraIndex],
+            kundaNakshatraIndex: kundaNakshatraIndex,
+            trinalType: trinalType,
+            isTrinal1st: isTrinal1st,
+            isTrinal10th: isTrinal10th,
+            isTrinal19th: isTrinal19th
+          });
+        }
+      }
+      
+      setProcessing(false);
+      
+      console.log("\n" + "=".repeat(70));
+      console.log("KUNDA SIDDHANTA TRINAL SCAN COMPLETE");
+      console.log("=".repeat(70));
+      console.log("Janma Nakshatra:", nakshatras[janmaNakshatraIndex], `(index ${janmaNakshatraIndex})`);
+      console.log("Window:", windowLabel);
+      console.log("Time points scanned:", debugInfo.total);
+      console.log("\nTrinal Matches:");
+      console.log(`  1st (Same): ${debugInfo.kundaNak1stMatches} matches`);
+      console.log(`  10th: ${debugInfo.kundaNak10thMatches} matches`);
+      console.log(`  19th: ${debugInfo.kundaNak19thMatches} matches`);
+      console.log(`  TOTAL TRINAL: ${debugInfo.trinalMatches} matches`);
+      console.log("=".repeat(70));
+      
+      if (candidates.length > 0) {
+        // Sort by closest to original time
+        candidates.sort((a, b) => Math.abs(a.offset) - Math.abs(b.offset));
+        
+        const bestCandidate = candidates[0];
+        console.log("\n✅ BEST MATCH (closest to input time):");
+        console.log("Time:", bestCandidate.time);
+        console.log("Offset:", bestCandidate.offset, "seconds");
+        console.log("Lagna:", bestCandidate.lagna.sign, bestCandidate.lagnaDegrees.toFixed(3) + "°");
+        console.log("Kunda Nakshatra:", bestCandidate.kundaNakshatra);
+        console.log("Trinal Type:", bestCandidate.trinalType);
+        
+        setLockedTime({
+          ...bestCandidate,
+          moon: moonDetails, // Include original moon details
+          method: "trinal"
+        });
+        setPhase(6);
+      } else {
+        setSearchResults({
+          ...debugInfo,
+          windowLabel: windowLabel,
+          expandedWindow: expandedWindow,
+          method: "trinal"
+        });
+        setNoMatchFound(true);
+      }
+    }, 100);
   };
 
   const handleKundaLock = (expandedWindow = 0) => {
@@ -3358,15 +3854,137 @@ const ProgressiveBTRApp = () => {
         </div>
 
         <button
-          onClick={() => setPhase(2)}
+          onClick={() => setPhase(1.8)}
           className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold py-4 px-6 rounded-lg hover:from-purple-600 hover:to-pink-600 transform hover:scale-105 transition-all duration-200 shadow-lg flex items-center justify-center gap-2"
         >
-          Continue to D9 Soul Quiz
+          Continue to Moon Nakshatra Analysis
           <ChevronRight size={20} />
         </button>
 
         <button
           onClick={() => setPhase(1.6)}
+          className="w-full bg-white/10 text-white font-bold py-3 px-6 rounded-lg hover:bg-white/20 transition-all duration-200 border border-white/30"
+        >
+          ← Back
+        </button>
+      </div>
+    );
+  };
+
+  const renderPhase1_8 = () => {
+    if (!moonDetails) return null;
+    
+    const nakshatraTraits = getNakshatraTraits(moonDetails.nakshatra, moonDetails.nakPada);
+
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="bg-purple-500 text-white rounded-full w-10 h-10 flex items-center justify-center font-bold">
+            <Moon size={20} />
+          </div>
+          <h2 className="text-2xl font-bold text-white">Moon Nakshatra - Emotional Nature</h2>
+        </div>
+
+        <div className="bg-gradient-to-r from-blue-500/20 to-cyan-500/20 p-4 rounded-xl border border-blue-300/30">
+          <div className="flex items-center gap-2 mb-2">
+            <Target size={20} className="text-blue-300" />
+            <div className="text-sm font-bold text-white">
+              Your Moon's Nakshatra Reveals Your Inner Emotional Nature
+            </div>
+          </div>
+          <p className="text-white/80 text-xs">
+            The Moon represents your mind, emotions, and subconscious patterns. Its Nakshatra placement shows your deepest emotional nature and instinctive reactions.
+          </p>
+        </div>
+
+        <div className="bg-white/10 p-6 rounded-xl border border-white/20">
+          <h3 className="text-lg font-bold text-white mb-4">Your Moon Nakshatra: {moonDetails.nakshatra}</h3>
+          
+          {/* Nakshatra Details */}
+          <div className="bg-blue-500/20 p-4 rounded-lg mb-4 border border-blue-400/30">
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <p className="text-white/70 text-xs">Nakshatra</p>
+                <p className="font-bold text-white text-lg">{moonDetails.nakshatra}</p>
+              </div>
+              <div>
+                <p className="text-white/70 text-xs">Ruling Lord</p>
+                <p className="font-bold text-white text-lg">{moonDetails.nakshatraLord}</p>
+              </div>
+              <div>
+                <p className="text-white/70 text-xs">Moon Rashi</p>
+                <p className="font-bold text-white text-lg">{moonDetails.sign}</p>
+              </div>
+              <div>
+                <p className="text-white/70 text-xs">Pada (Quarter)</p>
+                <p className="font-bold text-white text-lg">Pada {moonDetails.nakPada}</p>
+              </div>
+            </div>
+            
+            <div className="border-t border-blue-400/30 pt-3 mt-3">
+              <p className="text-white/70 text-xs mb-1">General Characteristics:</p>
+              <p className="text-white/90 text-sm">{nakshatraTraits.general}</p>
+            </div>
+            
+            <div className="border-t border-blue-400/30 pt-3 mt-3">
+              <p className="text-white/70 text-xs mb-1">Pada {moonDetails.nakPada} Specific Traits:</p>
+              <p className="text-white/90 text-sm">{nakshatraTraits.pada}</p>
+            </div>
+          </div>
+
+          <p className="text-white/90 mb-3 font-semibold">Does this describe your emotional nature and instinctive reactions?</p>
+          
+          <div className="flex gap-4 mb-4">
+            <button
+              onClick={() => setNakshatraConfirmed(true)}
+              className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all ${
+                nakshatraConfirmed === true ? 'bg-green-500 text-white' : 'bg-white/10 text-white/80 hover:bg-white/20'
+              }`}
+            >
+              ✓ Yes, this resonates with me
+            </button>
+            <button
+              onClick={() => setNakshatraConfirmed(false)}
+              className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all ${
+                nakshatraConfirmed === false ? 'bg-orange-500 text-white' : 'bg-white/10 text-white/80 hover:bg-white/20'
+              }`}
+            >
+              ✗ This doesn't feel right
+            </button>
+          </div>
+
+          {nakshatraConfirmed === false && (
+            <div className="bg-yellow-500/20 border border-yellow-400/30 rounded-lg p-4 mt-4">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="text-yellow-400 flex-shrink-0 mt-0.5" size={20} />
+                <div className="text-sm text-white/90">
+                  <p className="font-semibold mb-1">Moon Nakshatra Doesn't Match?</p>
+                  <p>This might indicate:</p>
+                  <ul className="list-disc list-inside mt-2 space-y-1 text-white/80">
+                    <li>Birth time may be off by several minutes</li>
+                    <li>Moon moves quickly (~13° per day)</li>
+                    <li>Nakshatra boundaries are very precise</li>
+                  </ul>
+                  <p className="mt-2">
+                    The Kunda Siddhanta process ahead will help refine the exact time to match your emotional nature.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <button
+          onClick={() => setPhase(2)}
+          disabled={nakshatraConfirmed === null}
+          className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-bold py-4 px-6 rounded-lg hover:from-blue-600 hover:to-cyan-600 transform hover:scale-105 transition-all duration-200 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+        >
+          <CheckCircle size={20} />
+          Continue to D9 Soul Quiz
+        </button>
+
+        <button
+          onClick={() => setPhase(1.7)}
           className="w-full bg-white/10 text-white font-bold py-3 px-6 rounded-lg hover:bg-white/20 transition-all duration-200 border border-white/30"
         >
           ← Back
@@ -3767,19 +4385,35 @@ const ProgressiveBTRApp = () => {
             <div>
               <h3 className="text-xl font-bold text-white mb-2">No Exact Match Found</h3>
               <p className="text-white/90 text-sm mb-3">
-                The entered birth time doesn't match all your divisional chart selections within {searchResults.windowLabel}.
+                {searchResults.method === "trinal" 
+                  ? `No trinal Nakshatra match found within ${searchResults.windowLabel}.`
+                  : `The entered birth time doesn't match all your divisional chart selections within ${searchResults.windowLabel}.`
+                }
               </p>
               
               <div className="bg-black/30 p-4 rounded-lg mb-4">
                 <p className="text-white/80 text-sm font-mono mb-2">Scan Results ({searchResults.windowLabel}):</p>
                 <div className="space-y-1 text-xs text-white/70">
                   <p>• Scanned: {searchResults.total} time points</p>
-                  <p>• D1 Lagna {lagnaDetails?.sign} (±2° tolerance): {searchResults.d1Matches || 0} times</p>
-                  <p>• D9 {d9Selection} found: {searchResults.d9Matches} times</p>
-                  <p>• D10 {d10Selection} found: {searchResults.d10Matches} times</p>
-                  <p>• D7 {d7Selection} found: {searchResults.d7Matches} times</p>
-                  <p>• Moon {moonRashiSelection} found: {searchResults.moonMatches} times</p>
-                  <p className="font-bold text-yellow-400">• All matching (D1+D9+D10+D7+Moon): {searchResults.allMatches}</p>
+                  
+                  {searchResults.method === "trinal" ? (
+                    <>
+                      <p>• Janma Nakshatra: {moonDetails?.nakshatra}</p>
+                      <p>• 1st (Same as Janma): {searchResults.kundaNak1stMatches} matches</p>
+                      <p>• 10th from Janma: {searchResults.kundaNak10thMatches} matches</p>
+                      <p>• 19th from Janma: {searchResults.kundaNak19thMatches} matches</p>
+                      <p className="font-bold text-yellow-400">• Total Trinal Matches: {searchResults.trinalMatches}</p>
+                    </>
+                  ) : (
+                    <>
+                      <p>• D1 Lagna {lagnaDetails?.sign} (±2° tolerance): {searchResults.d1Matches || 0} times</p>
+                      <p>• D9 {d9Selection} found: {searchResults.d9Matches} times</p>
+                      <p>• D10 {d10Selection} found: {searchResults.d10Matches} times</p>
+                      <p>• D7 {d7Selection} found: {searchResults.d7Matches} times</p>
+                      <p>• Moon {moonRashiSelection} found: {searchResults.moonMatches} times</p>
+                      <p className="font-bold text-yellow-400">• All matching (D1+D9+D10+D7+Moon): {searchResults.allMatches}</p>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -3788,9 +4422,10 @@ const ProgressiveBTRApp = () => {
                   <strong>What this means:</strong>
                 </p>
                 <p className="text-white/80 text-xs">
-                  The Kunda Siddhanta ensures that the corrected time maintains the <strong>same D1 Lagna degree (±2°)</strong> 
-                  while matching all divisional charts. This prevents false matches where the time would jump to a 
-                  completely different ascendant degree.
+                  {searchResults.method === "trinal"
+                    ? "The Kunda Siddhanta trinal method searches for times where (Lagna × 81) % 360 produces a Nakshatra that has a trinal relationship (1st, 10th, or 19th) with your Janma Nakshatra. This ensures astrological harmony."
+                    : "The Kunda Siddhanta ensures that the corrected time maintains the same D1 Lagna degree (±2°) while matching all divisional charts. This prevents false matches where the time would jump to a completely different ascendant degree."
+                  }
                 </p>
               </div>
 
@@ -3815,7 +4450,13 @@ const ProgressiveBTRApp = () => {
 
                       <div className="flex gap-3">
                         <button
-                          onClick={() => handleKundaLock(999)} // 999 = unlimited
+                          onClick={() => {
+                            if (kundaMethod === "trinal") {
+                              handleKundaLockTrinal(999);
+                            } else {
+                              handleKundaLock(999);
+                            }
+                          }}
                           disabled={processing}
                           className="flex-1 bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold py-3 px-4 rounded-lg hover:from-purple-600 hover:to-indigo-600 transition-all duration-200 shadow-lg disabled:opacity-50 flex items-center justify-center gap-2"
                         >
@@ -3861,7 +4502,13 @@ const ProgressiveBTRApp = () => {
 
                     <div className="flex gap-3">
                       <button
-                        onClick={() => handleKundaLock(currentWindow + 1)}
+                        onClick={() => {
+                          if (kundaMethod === "trinal") {
+                            handleKundaLockTrinal(currentWindow + 1);
+                          } else {
+                            handleKundaLock(currentWindow + 1);
+                          }
+                        }}
                         disabled={processing}
                         className="flex-1 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold py-3 px-4 rounded-lg hover:from-green-600 hover:to-emerald-600 transition-all duration-200 shadow-lg disabled:opacity-50 flex items-center justify-center gap-2"
                       >
@@ -3888,23 +4535,100 @@ const ProgressiveBTRApp = () => {
       )}
 
       {!noMatchFound && (
-        <button
-          onClick={() => handleKundaLock(0)}
-          disabled={processing}
-          className="w-full bg-gradient-to-r from-orange-500 to-red-500 text-white font-bold py-4 px-6 rounded-lg hover:from-orange-600 hover:to-red-600 transform hover:scale-105 transition-all duration-200 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-        >
-          {processing ? (
-            <>
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-              Applying Kunda Siddhanta (scanning...)
-            </>
-          ) : (
-            <>
-              <Calculator size={20} />
-              Lock Birth Time to Exact Second
-            </>
-          )}
-        </button>
+        <>
+          {/* Kunda Method Selection */}
+          <div className="bg-white/10 p-6 rounded-xl border border-white/20 space-y-4">
+            <h3 className="text-lg font-bold text-white mb-3">Choose Kunda Siddhanta Method</h3>
+            
+            <label className={`flex items-start gap-3 p-4 rounded-lg cursor-pointer transition-all ${
+              kundaMethod === "trinal"
+                ? 'bg-orange-500/40 border-2 border-orange-400'
+                : 'bg-white/5 border border-white/20 hover:bg-white/10'
+            }`}>
+              <input
+                type="radio"
+                name="kunda-method"
+                checked={kundaMethod === "trinal"}
+                onChange={() => setKundaMethod("trinal")}
+                className="mt-1 w-5 h-5"
+              />
+              <div>
+                <div className="font-bold text-white mb-1">Trinal Kunda (Traditional)</div>
+                <div className="text-white/80 text-sm mb-2">
+                  Uses the formula: <code className="bg-black/30 px-2 py-1 rounded">(Lagna × 81) % 360</code>
+                </div>
+                <div className="text-white/70 text-xs">
+                  Finds times where the Kunda Nakshatra forms a <strong>trinal relationship</strong> with your Janma Nakshatra:
+                  <ul className="list-disc list-inside mt-1 ml-2">
+                    <li>1st: Same as Janma (most precise)</li>
+                    <li>10th: 9 Nakshatras ahead (harmonious)</li>
+                    <li>19th: 18 Nakshatras ahead (balanced)</li>
+                  </ul>
+                </div>
+                <div className="text-orange-300 text-xs mt-2">
+                  ⚡ Faster scan, ±10 second precision
+                </div>
+              </div>
+            </label>
+
+            <label className={`flex items-start gap-3 p-4 rounded-lg cursor-pointer transition-all ${
+              kundaMethod === "divisional"
+                ? 'bg-orange-500/40 border-2 border-orange-400'
+                : 'bg-white/5 border border-white/20 hover:bg-white/10'
+            }`}>
+              <input
+                type="radio"
+                name="kunda-method"
+                checked={kundaMethod === "divisional"}
+                onChange={() => setKundaMethod("divisional")}
+                className="mt-1 w-5 h-5"
+              />
+              <div>
+                <div className="font-bold text-white mb-1">Divisional Charts (Comprehensive)</div>
+                <div className="text-white/80 text-sm mb-2">
+                  Validates all divisional charts simultaneously
+                </div>
+                <div className="text-white/70 text-xs">
+                  Ensures ALL of these match your confirmed selections:
+                  <ul className="list-disc list-inside mt-1 ml-2">
+                    <li>D1 Lagna degree (±2° tolerance)</li>
+                    <li>D9 Navamsha (soul nature)</li>
+                    <li>D10 Dashamsha (career)</li>
+                    <li>D7 Saptamsha (legacy)</li>
+                    <li>Moon Rashi (emotional base)</li>
+                  </ul>
+                </div>
+                <div className="text-blue-300 text-xs mt-2">
+                  🎯 More thorough, ±1 second precision
+                </div>
+              </div>
+            </label>
+          </div>
+
+          <button
+            onClick={() => {
+              if (kundaMethod === "trinal") {
+                handleKundaLockTrinal(0);
+              } else {
+                handleKundaLock(0);
+              }
+            }}
+            disabled={processing}
+            className="w-full bg-gradient-to-r from-orange-500 to-red-500 text-white font-bold py-4 px-6 rounded-lg hover:from-orange-600 hover:to-red-600 transform hover:scale-105 transition-all duration-200 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {processing ? (
+              <>
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                Applying Kunda Siddhanta (scanning...)
+              </>
+            ) : (
+              <>
+                <Calculator size={20} />
+                Lock Birth Time ({kundaMethod === "trinal" ? "Trinal Method" : "Divisional Method"})
+              </>
+            )}
+          </button>
+        </>
       )}
 
       {processing && (
@@ -3954,7 +4678,24 @@ const ProgressiveBTRApp = () => {
                   ⚠️ {adjustmentText}
                 </p>
               )}
-              <p className="text-white/80 text-sm mb-6">Precision: ±1 second • Kunda Siddhanta</p>
+              <p className="text-white/80 text-sm mb-6">
+                Precision: ±{lockedTime.method === "trinal" ? "10" : "1"} second{lockedTime.method === "trinal" ? "s" : ""} • 
+                Kunda Siddhanta ({lockedTime.method === "trinal" ? "Trinal Method" : "Divisional Method"})
+              </p>
+              
+              {lockedTime.method === "trinal" && lockedTime.kundaNakshatra && (
+                <div className="bg-orange-500/20 border border-orange-400/30 px-4 py-3 rounded-lg mb-4">
+                  <p className="text-white/90 text-sm mb-1">
+                    <strong>Kunda Nakshatra:</strong> {lockedTime.kundaNakshatra}
+                  </p>
+                  <p className="text-white/70 text-xs mb-1">
+                    Formula: (Lagna {lockedTime.lagnaDegrees?.toFixed(2)}° × 81) % 360 = {lockedTime.kundaProduct?.toFixed(2)}°
+                  </p>
+                  <p className="text-orange-300 text-xs font-semibold">
+                    {lockedTime.trinalType}
+                  </p>
+                </div>
+              )}
               
               {lockedTime.degreeDiff && (
                 <div className="bg-white/10 px-4 py-2 rounded-lg mb-4 inline-block">
@@ -3971,22 +4712,38 @@ const ProgressiveBTRApp = () => {
                   <p className="text-white font-bold text-xl">{lockedTime.lagna.sign}</p>
                   <p className="text-white/80 text-sm">{degreesToDMS(lockedTime.lagna.degree).formatted}</p>
                 </div>
-                <div>
-                  <p className="text-white/70 text-sm">D9 Navamsha</p>
-                  <p className="text-white font-bold">{lockedTime.d9}</p>
-                </div>
-                <div>
-                  <p className="text-white/70 text-sm">D10 Dashamsha</p>
-                  <p className="text-white font-bold">{lockedTime.d10}</p>
-                </div>
-                <div>
-                  <p className="text-white/70 text-sm">D7 Saptamsha</p>
-                  <p className="text-white font-bold">{lockedTime.d7}</p>
-                </div>
-                <div>
-                  <p className="text-white/70 text-sm">Moon Rashi</p>
-                  <p className="text-white font-bold">{lockedTime.moon.sign}</p>
-                </div>
+                
+                {lockedTime.method === "divisional" ? (
+                  <>
+                    <div>
+                      <p className="text-white/70 text-sm">D9 Navamsha</p>
+                      <p className="text-white font-bold">{lockedTime.d9}</p>
+                    </div>
+                    <div>
+                      <p className="text-white/70 text-sm">D10 Dashamsha</p>
+                      <p className="text-white font-bold">{lockedTime.d10}</p>
+                    </div>
+                    <div>
+                      <p className="text-white/70 text-sm">D7 Saptamsha</p>
+                      <p className="text-white font-bold">{lockedTime.d7}</p>
+                    </div>
+                    <div>
+                      <p className="text-white/70 text-sm">Moon Rashi</p>
+                      <p className="text-white font-bold">{lockedTime.moon.sign}</p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <p className="text-white/70 text-sm">Janma Nakshatra</p>
+                      <p className="text-white font-bold">{moonDetails?.nakshatra}</p>
+                    </div>
+                    <div>
+                      <p className="text-white/70 text-sm">Moon Rashi</p>
+                      <p className="text-white font-bold">{lockedTime.moon?.sign || moonDetails?.sign}</p>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -4085,6 +4842,7 @@ const ProgressiveBTRApp = () => {
           {phase === 1.5 && renderPhase1_5()}
           {phase === 1.6 && renderPhase1_6()}
           {phase === 1.7 && renderPhase1_7()}
+          {phase === 1.8 && renderPhase1_8()}
           {phase === 2 && renderPhase2()}
           {phase === 3 && renderPhase3()}
           {phase === 4 && renderPhase4()}
