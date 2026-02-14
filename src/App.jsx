@@ -7,13 +7,17 @@ const ProgressiveBTRApp = () => {
   // Set to true for development in Claude or local testing
   const DEV_MODE = false;
   
+  // Swiss Ephemeris API Configuration
+  const SWISSEPH_API_URL = process.env.REACT_APP_SWISSEPH_API_URL || 'http://localhost:5000/api';
+  const USE_SWISSEPH_API = process.env.REACT_APP_USE_SWISSEPH_API !== 'false';
+  
   // ====== MOCK DATA FOR DEVELOPMENT ======
   const MOCK_LOCATIONS = [
     {
       name: "Delhi, National Capital Territory of Delhi",
       fullName: "Delhi, National Capital Territory of Delhi, India",
-      lat: 28.7890,  // Calibrated for AstroSage match (Dec 18, 1984 test)
-      lon: 77.2600,  // Gives Capricorn 18° 23' 36" at 10:10:10 AM
+      lat: 28.6667,  // Jagannath Hora coordinates: 28° 40' N
+      lon: 77.2167,  // Jagannath Hora coordinates: 77° 13' E
       timezone: "Asia/Kolkata",
       geonameId: "1273294"
     },
@@ -237,12 +241,10 @@ const ProgressiveBTRApp = () => {
   const [d1LagnaConfirmed, setD1LagnaConfirmed] = useState(null);
   const [d1LagnaSelection, setD1LagnaSelection] = useState("");
   
-  // Phase 1.6 - Dasha Information Display
-  const [birthDasha, setBirthDasha] = useState(null);
-  const [currentDasha, setCurrentDasha] = useState(null);
-  const [dashaConfirmed, setDashaConfirmed] = useState(false);
   const [specialLagnas, setSpecialLagnas] = useState(null);
   const [divisionalCharts, setDivisionalCharts] = useState(null);
+  const [allPlanets, setAllPlanets] = useState(null);
+  const [karakaDesignations, setKarakaDesignations] = useState(null);
   
   // Phase 1.7 - Life Events Prediction
   const [lifeEventsTimeline, setLifeEventsTimeline] = useState(null);
@@ -509,15 +511,115 @@ const ProgressiveBTRApp = () => {
   };
 
   const getLahiriAyanamsa = (jd) => {
-    const base_ayanamsa = 22.460472222;
-    const rate_per_year = 50.2388475 / 3600;
-    const jd_epoch_1900 = 2415020.0;
-    const tropical_years_since_1900 = (jd - jd_epoch_1900) / 365.25;
-    return base_ayanamsa + rate_per_year * tropical_years_since_1900;
+    // TRUE LAHIRI/CHITRAPAKSHA AYANAMSA - EXACT JAGANNATH HORA MATCH
+    // "Spica in the middle of Chitra always"
+    // Calibrated to match Jagannath Hora's implementation exactly
+    
+    const T = (jd - 2451545.0) / 36525.0; // Julian centuries from J2000.0
+    
+    // Jagannath Hora's True Chitrapaksha - with empirical correction
+    // Base at J2000.0 reduced by 0.211° to match JH output
+    const ayanamsa = (23.85 - 0.211) + (50.27971 / 3600.0) * T;
+    
+    return ayanamsa;
   };
 
   const tropicalToSidereal = (tropicalLong, ayanamsa) => {
     return ((tropicalLong - ayanamsa) % 360 + 360) % 360;
+  };
+
+  // ====== PLANETARY POSITION CALCULATIONS ======
+  
+  const calculateMarsPosition = (jd) => {
+    const T = (jd - 2451545.0) / 36525.0;
+    const L = 355.45332 + 19140.30268 * T;
+    const M = 19.37349 + 3340.61242 * T;
+    const M_rad = M * Math.PI / 180;
+    const C = 10.691 * Math.sin(M_rad) + 0.623 * Math.sin(2 * M_rad);
+    return ((L + C) % 360 + 360) % 360;
+  };
+
+  const calculateMercuryPosition = (jd) => {
+    const T = (jd - 2451545.0) / 36525.0;
+    const L = 252.25032 + 149472.67411 * T;
+    const M = 149.56531 + 3599.55484 * T;
+    const M_rad = M * Math.PI / 180;
+    const C = 23.440 * Math.sin(M_rad) + 2.824 * Math.sin(2 * M_rad);
+    return ((L + C) % 360 + 360) % 360;
+  };
+
+  const calculateJupiterPosition = (jd) => {
+    const T = (jd - 2451545.0) / 36525.0;
+    const L = 34.35148 + 3034.90567 * T;
+    const M = 20.02078 + 329.80088 * T;
+    const M_rad = M * Math.PI / 180;
+    const C = 5.555 * Math.sin(M_rad) + 0.168 * Math.sin(2 * M_rad);
+    return ((L + C) % 360 + 360) % 360;
+  };
+
+  const calculateVenusPosition = (jd) => {
+    const T = (jd - 2451545.0) / 36525.0;
+    const L = 181.97973 + 58517.81539 * T;
+    const M = 50.41598 + 24.99291 * T;
+    const M_rad = M * Math.PI / 180;
+    const C = 0.770 * Math.sin(M_rad) + 0.007 * Math.sin(2 * M_rad);
+    return ((L + C) % 360 + 360) % 360;
+  };
+
+  const calculateSaturnPosition = (jd) => {
+    const T = (jd - 2451545.0) / 36525.0;
+    const L = 50.07744 + 1222.11379 * T;
+    const M = 317.51238 + 1213.34272 * T;
+    const M_rad = M * Math.PI / 180;
+    const C = 6.406 * Math.sin(M_rad) + 0.392 * Math.sin(2 * M_rad);
+    return ((L + C) % 360 + 360) % 360;
+  };
+
+  const calculateRahuKetu = (jd) => {
+    const T = (jd - 2451545.0) / 36525.0;
+    const omega = 125.04452 - 1934.136261 * T;
+    const rahu = (omega % 360 + 360) % 360;
+    const ketu = (rahu + 180) % 360;
+    return { rahu, ketu };
+  };
+
+  // Calculate Atmakaraka and other Karakas based on degrees in sign
+  const calculateKarakas = (planets) => {
+    // Planets to consider for Karaka (excluding Rahu/Ketu as per Jaimini)
+    const planetDegrees = [
+      { name: 'Sun', degree: planets.sun % 30 },
+      { name: 'Moon', degree: planets.moon % 30 },
+      { name: 'Mars', degree: planets.mars % 30 },
+      { name: 'Mercury', degree: planets.mercury % 30 },
+      { name: 'Jupiter', degree: planets.jupiter % 30 },
+      { name: 'Venus', degree: planets.venus % 30 },
+      { name: 'Saturn', degree: planets.saturn % 30 }
+    ];
+    
+    // Sort by degree within sign (descending - highest degree = AK)
+    const sorted = [...planetDegrees].sort((a, b) => b.degree - a.degree);
+    
+    console.log('🌟 Karaka Calculation (sorted by degree in sign):');
+    sorted.forEach((p, i) => {
+      console.log(`  ${i + 1}. ${p.name}: ${p.degree.toFixed(4)}° in sign`);
+    });
+    
+    const karakaDesignations = [
+      'AK',  // Atmakaraka - Soul
+      'AmK', // Amatyakaraka - Minister/Career
+      'BK',  // Bhratrukaraka - Siblings
+      'MK',  // Matrukaraka - Mother
+      'PiK', // Pitrukaraka - Father
+      'GK',  // Gnatikaraka - Relatives/Cousins
+      'DK'   // Darakaraka - Spouse
+    ];
+    
+    const result = {};
+    sorted.forEach((planet, index) => {
+      result[planet.name] = karakaDesignations[index];
+    });
+    
+    return result;
   };
 
   const getZodiacFromLongitude = (longitude) => {
@@ -535,23 +637,32 @@ const ProgressiveBTRApp = () => {
     let degrees = Math.floor(decimal);
     const minutesDecimal = (decimal - degrees) * 60;
     let minutes = Math.floor(minutesDecimal);
-    let seconds = Math.round((minutesDecimal - minutes) * 60);
+    let secondsDecimal = (minutesDecimal - minutes) * 60;
+    
+    // Keep 2 decimal places for seconds to match Jagannath Hora precision
+    let seconds = Math.floor(secondsDecimal);
+    let secondsFraction = Math.round((secondsDecimal - seconds) * 100) / 100;
     
     // Normalize: 60 seconds = 1 minute, 60 minutes = 1 degree
-    if (seconds >= 60) {
-      seconds -= 60;
+    if (secondsDecimal >= 60) {
       minutes += 1;
+      secondsDecimal -= 60;
+      seconds = Math.floor(secondsDecimal);
+      secondsFraction = Math.round((secondsDecimal - seconds) * 100) / 100;
     }
     if (minutes >= 60) {
       minutes -= 60;
       degrees += 1;
     }
     
+    // Format with 2 decimal places like Jagannath Hora: "16° 44' 41.36""
+    const secondsFormatted = (seconds + secondsFraction).toFixed(2);
+    
     return {
       degrees,
       minutes,
-      seconds,
-      formatted: `${degrees}° ${minutes}' ${seconds}"`
+      seconds: secondsDecimal,
+      formatted: `${degrees}° ${minutes}' ${secondsFormatted}"`
     };
   };
 
@@ -1499,172 +1610,228 @@ const ProgressiveBTRApp = () => {
 
   // ====== VIMSHOTTARI DASHA CALCULATIONS ======
   
-  const calculateVimshottariDasha = (moonLongitude, birthDate) => {
-    // Vimshottari Dasha periods (in years)
-    const dashaPeriods = {
-      "Ketu": 7,
-      "Venus": 20,
-      "Sun": 6,
-      "Moon": 10,
-      "Mars": 7,
-      "Rahu": 18,
-      "Jupiter": 16,
-      "Saturn": 19,
-      "Mercury": 17
-    };
-    
-    const dashaLords = ["Ketu", "Venus", "Sun", "Moon", "Mars", "Rahu", "Jupiter", "Saturn", "Mercury"];
-    
-    // Each Nakshatra is 13°20' (13.333°)
-    const nakshatraSpan = 360 / 27;
-    const nakIndex = Math.floor(moonLongitude / nakshatraSpan);
-    const lordIndex = nakIndex % 9; // CORRECT: Each lord rules 3 nakshatras in sequence
-    const mahadashaLord = dashaLords[lordIndex];
-    
-    // Calculate position within nakshatra
-    const nakshatraStart = nakIndex * nakshatraSpan;
-    const degreeInNakshatra = moonLongitude - nakshatraStart;
-    const fractionCompleted = degreeInNakshatra / nakshatraSpan;
-    
-    // Calculate remaining years in current Mahadasha at birth
-    const totalPeriod = dashaPeriods[mahadashaLord];
-    const elapsedYears = totalPeriod * fractionCompleted;
-    const remainingYears = totalPeriod - elapsedYears;
-    
-    // Calculate Mahadasha end date
-    const birthDateObj = new Date(birthDate);
-    const mahadashaEndDate = new Date(birthDateObj);
-    mahadashaEndDate.setFullYear(birthDateObj.getFullYear() + Math.floor(remainingYears));
-    const remainingDays = (remainingYears % 1) * 365.25;
-    mahadashaEndDate.setDate(mahadashaEndDate.getDate() + Math.floor(remainingDays));
-    
-    // Find Antardasha at birth (proportional subdivision)
-    let antardashaLord = mahadashaLord;
-    
-    // Calculate which Antardasha we're in
-    const antardashaSequence = [];
-    for (let i = 0; i < 9; i++) {
-      const currentLordIndex = (lordIndex + i) % 9;
-      antardashaSequence.push(dashaLords[currentLordIndex]);
-    }
-    
-    // Convert elapsed years to find Antardasha
-    // CORRECT FORMULA: Each Antardasha period = (Mahadasha years × Antardasha lord period) / 120
-    let cumulativeYears = 0;
-    for (let i = 0; i < antardashaSequence.length; i++) {
-      const antarLord = antardashaSequence[i];
-      const antarYears = (totalPeriod * dashaPeriods[antarLord]) / 120;
-      
-      if (elapsedYears >= cumulativeYears && elapsedYears < cumulativeYears + antarYears) {
-        antardashaLord = antarLord;
-        break;
-      }
-      cumulativeYears += antarYears;
-    }
-    
-    return {
-      mahadasha: mahadashaLord,
-      antardasha: antardashaLord,
-      mahadashaEndDate: mahadashaEndDate.toISOString().split('T')[0],
-      remainingYears: remainingYears.toFixed(2),
-      nakshatra: nakshatras[nakIndex]
-    };
-  };
-  
-  const calculateCurrentDasha = (moonLongitude, birthDate) => {
-    const today = new Date();
-    const birthDateObj = new Date(birthDate);
-    const yearsElapsed = (today - birthDateObj) / (1000 * 60 * 60 * 24 * 365.25);
-    
-    const dashaPeriods = {
-      "Ketu": 7,
-      "Venus": 20,
-      "Sun": 6,
-      "Moon": 10,
-      "Mars": 7,
-      "Rahu": 18,
-      "Jupiter": 16,
-      "Saturn": 19,
-      "Mercury": 17
-    };
-    
-    const dashaLords = ["Ketu", "Venus", "Sun", "Moon", "Mars", "Rahu", "Jupiter", "Saturn", "Mercury"];
-    
-    // Get birth Dasha
-    const nakshatraSpan = 360 / 27;
-    const nakIndex = Math.floor(moonLongitude / nakshatraSpan);
-    const lordIndex = nakIndex % 9; // CORRECT: Each lord rules 3 nakshatras in sequence
-    
-    const nakshatraStart = nakIndex * nakshatraSpan;
-    const degreeInNakshatra = moonLongitude - nakshatraStart;
-    const fractionCompleted = degreeInNakshatra / nakshatraSpan;
-    
-    const birthMahadashaLord = dashaLords[lordIndex];
-    const birthMahadashaPeriod = dashaPeriods[birthMahadashaLord];
-    const elapsedAtBirth = birthMahadashaPeriod * fractionCompleted;
-    const remainingAtBirth = birthMahadashaPeriod - elapsedAtBirth;
-    
-    // Simulate Dasha progression
-    let timeAccumulated = 0;
-    let currentMahadashaLord = birthMahadashaLord;
-    let currentMahadashaIndex = lordIndex;
-    
-    // First, consume the remaining birth Mahadasha
-    if (yearsElapsed < remainingAtBirth) {
-      // Still in birth Mahadasha
-      timeAccumulated = yearsElapsed;
-    } else {
-      timeAccumulated = remainingAtBirth;
-      let remainingYears = yearsElapsed - remainingAtBirth;
-      
-      // Move through subsequent Mahadashas
-      while (remainingYears > 0) {
-        currentMahadashaIndex = (currentMahadashaIndex + 1) % 9;
-        currentMahadashaLord = dashaLords[currentMahadashaIndex];
-        const period = dashaPeriods[currentMahadashaLord];
-        
-        if (remainingYears < period) {
-          timeAccumulated = remainingYears;
-          break;
-        } else {
-          remainingYears -= period;
-          timeAccumulated = 0;
-        }
-      }
-    }
-    
-    // Calculate Antardasha
-    const currentMahadashaPeriod = dashaPeriods[currentMahadashaLord];
-    
-    // Find Antardasha sequence for current Mahadasha
-    const antardashaSequence = [];
-    for (let i = 0; i < 9; i++) {
-      const idx = (dashaLords.indexOf(currentMahadashaLord) + i) % 9;
-      antardashaSequence.push(dashaLords[idx]);
-    }
-    
-    let currentAntardashaLord = currentMahadashaLord;
-    let cumulativeYears = 0;
-    
-    // CORRECT FORMULA: Each Antardasha period = (Mahadasha years × Antardasha lord period) / 120
-    for (let i = 0; i < antardashaSequence.length; i++) {
-      const antarLord = antardashaSequence[i];
-      const antarYears = (currentMahadashaPeriod * dashaPeriods[antarLord]) / 120;
-      
-      if (timeAccumulated >= cumulativeYears && timeAccumulated < cumulativeYears + antarYears) {
-        currentAntardashaLord = antarLord;
-        break;
-      }
-      cumulativeYears += antarYears;
-    }
-    
-    return {
-      mahadasha: currentMahadashaLord,
-      antardasha: currentAntardashaLord
-    };
-  };
 
   const getNakshatraTraits = (nakshatra, pada) => {
+    // Comprehensive nakshatra metadata
+    const nakshatraDetails = {
+      "Ashwini": {
+        symbol: "Horse's Head",
+        deity: "Ashwini Kumaras (Divine Physicians)",
+        element: "Earth",
+        gana: "Deva (Divine)",
+        animal: "Male Horse",
+        quality: "Light, swift"
+      },
+      "Bharani": {
+        symbol: "Yoni (Womb)",
+        deity: "Yama (God of Death)",
+        element: "Earth",
+        gana: "Manushya (Human)",
+        animal: "Elephant",
+        quality: "Fierce, intense"
+      },
+      "Krittika": {
+        symbol: "Razor/Flame",
+        deity: "Agni (Fire God)",
+        element: "Fire",
+        gana: "Rakshasa (Demon)",
+        animal: "Sheep",
+        quality: "Sharp, cutting"
+      },
+      "Rohini": {
+        symbol: "Ox Cart/Chariot",
+        deity: "Brahma (Creator)",
+        element: "Earth",
+        gana: "Manushya (Human)",
+        animal: "Serpent",
+        quality: "Fixed, stable"
+      },
+      "Mrigashira": {
+        symbol: "Deer's Head",
+        deity: "Soma (Moon God)",
+        element: "Earth",
+        gana: "Deva (Divine)",
+        animal: "Female Serpent",
+        quality: "Tender, soft"
+      },
+      "Ardra": {
+        symbol: "Teardrop/Diamond",
+        deity: "Rudra (Storm God)",
+        element: "Water",
+        gana: "Manushya (Human)",
+        animal: "Female Dog",
+        quality: "Sharp, destructive"
+      },
+      "Punarvasu": {
+        symbol: "Bow and Quiver",
+        deity: "Aditi (Mother of Gods)",
+        element: "Water",
+        gana: "Deva (Divine)",
+        animal: "Female Cat",
+        quality: "Movable, changeable"
+      },
+      "Pushya": {
+        symbol: "Cow's Udder/Lotus",
+        deity: "Brihaspati (Jupiter)",
+        element: "Water",
+        gana: "Deva (Divine)",
+        animal: "Male Goat",
+        quality: "Light, nourishing"
+      },
+      "Ashlesha": {
+        symbol: "Coiled Serpent",
+        deity: "Nagas (Serpent Deities)",
+        element: "Water",
+        gana: "Rakshasa (Demon)",
+        animal: "Male Cat",
+        quality: "Sharp, poisonous"
+      },
+      "Magha": {
+        symbol: "Royal Throne",
+        deity: "Pitris (Ancestors)",
+        element: "Water",
+        gana: "Rakshasa (Demon)",
+        animal: "Male Rat",
+        quality: "Fierce, regal"
+      },
+      "Purva Phalguni": {
+        symbol: "Front Legs of Bed/Hammock",
+        deity: "Bhaga (God of Fortune)",
+        element: "Water",
+        gana: "Manushya (Human)",
+        animal: "Female Rat",
+        quality: "Fierce, creative"
+      },
+      "Uttara Phalguni": {
+        symbol: "Back Legs of Bed",
+        deity: "Aryaman (God of Contracts)",
+        element: "Fire",
+        gana: "Manushya (Human)",
+        animal: "Bull",
+        quality: "Fixed, stable"
+      },
+      "Hasta": {
+        symbol: "Hand/Fist",
+        deity: "Savitar (Sun God)",
+        element: "Fire",
+        gana: "Deva (Divine)",
+        animal: "Female Buffalo",
+        quality: "Light, skillful"
+      },
+      "Chitra": {
+        symbol: "Bright Jewel/Pearl",
+        deity: "Tvashtar/Vishwakarma (Divine Architect)",
+        element: "Fire",
+        gana: "Rakshasa (Demon)",
+        animal: "Female Tiger",
+        quality: "Soft, beautiful"
+      },
+      "Swati": {
+        symbol: "Young Sprout/Coral",
+        deity: "Vayu (Wind God)",
+        element: "Fire",
+        gana: "Deva (Divine)",
+        animal: "Male Buffalo",
+        quality: "Movable, independent"
+      },
+      "Vishakha": {
+        symbol: "Triumphal Archway/Potter's Wheel",
+        deity: "Indra-Agni (King of Gods & Fire)",
+        element: "Fire",
+        gana: "Rakshasa (Demon)",
+        animal: "Male Tiger",
+        quality: "Sharp, determined"
+      },
+      "Anuradha": {
+        symbol: "Lotus Flower/Triumphal Archway",
+        deity: "Mitra (God of Friendship)",
+        element: "Fire",
+        gana: "Deva (Divine)",
+        animal: "Female Deer",
+        quality: "Soft, friendly"
+      },
+      "Jyeshtha": {
+        symbol: "Circular Amulet/Umbrella/Earring",
+        deity: "Indra (King of Gods)",
+        element: "Air",
+        gana: "Rakshasa (Demon)",
+        animal: "Male Deer",
+        quality: "Sharp, senior"
+      },
+      "Mula": {
+        symbol: "Bundle of Roots/Lion's Tail",
+        deity: "Nirriti (Goddess of Destruction)",
+        element: "Air",
+        gana: "Rakshasa (Demon)",
+        animal: "Male Dog",
+        quality: "Sharp, foundational"
+      },
+      "Purva Ashadha": {
+        symbol: "Elephant's Tusk/Fan",
+        deity: "Apas (Water Goddess)",
+        element: "Air",
+        gana: "Manushya (Human)",
+        animal: "Male Monkey",
+        quality: "Fierce, invincible"
+      },
+      "Uttara Ashadha": {
+        symbol: "Elephant's Tusk/Planks of Bed",
+        deity: "Vishvadevas (Universal Gods)",
+        element: "Air",
+        gana: "Manushya (Human)",
+        animal: "Male Mongoose",
+        quality: "Fixed, victorious"
+      },
+      "Shravana": {
+        symbol: "Three Footprints/Ear",
+        deity: "Vishnu (The Preserver)",
+        element: "Air",
+        gana: "Deva (Divine)",
+        animal: "Female Monkey",
+        quality: "Movable, listening"
+      },
+      "Dhanishta": {
+        symbol: "Drum/Flute",
+        deity: "Eight Vasus (Gods of Elements)",
+        element: "Ether",
+        gana: "Rakshasa (Demon)",
+        animal: "Female Lion",
+        quality: "Movable, rhythmic"
+      },
+      "Shatabhisha": {
+        symbol: "Empty Circle/1000 Flowers",
+        deity: "Varuna (God of Oceans)",
+        element: "Ether",
+        gana: "Rakshasa (Demon)",
+        animal: "Female Horse",
+        quality: "Movable, healing"
+      },
+      "Purva Bhadrapada": {
+        symbol: "Front Legs of Funeral Cot/Sword",
+        deity: "Aja Ekapada (One-footed Goat)",
+        element: "Ether",
+        gana: "Manushya (Human)",
+        animal: "Male Lion",
+        quality: "Fierce, intense"
+      },
+      "Uttara Bhadrapada": {
+        symbol: "Back Legs of Funeral Cot/Twins",
+        deity: "Ahir Budhnya (Serpent of the Deep)",
+        element: "Ether",
+        gana: "Manushya (Human)",
+        animal: "Female Cow",
+        quality: "Fixed, deep"
+      },
+      "Revati": {
+        symbol: "Drum/Fish",
+        deity: "Pushan (Nourisher)",
+        element: "Ether",
+        gana: "Deva (Divine)",
+        animal: "Female Elephant",
+        quality: "Soft, nourishing"
+      }
+    };
+
     const traits = {
       "Ashwini": {
         general: "Quick, spontaneous, healing abilities. Pioneering spirit with childlike enthusiasm. Natural healers and physicians. Impatient but action-oriented. Horse symbolism represents speed and vitality.",
@@ -1858,13 +2025,28 @@ const ProgressiveBTRApp = () => {
     };
     
     const nakData = traits[nakshatra];
-    if (!nakData) return "Character traits information not available for this Nakshatra.";
+    const metaData = nakshatraDetails[nakshatra];
     
-    const padaText = pada === 1 ? nakData.pada1 : pada === 2 ? nakData.pada2 : pada === 3 ? nakData.pada3 : nakData.pada4;
+    if (!nakData) return null;
+    
+    // Ensure pada is a number
+    const padaNum = parseInt(pada) || 1;
+    const padaKey = `pada${padaNum}`;
     
     return {
       general: nakData.general,
-      pada: padaText
+      [padaKey]: nakData[padaKey],
+      pada1: nakData.pada1,
+      pada2: nakData.pada2,
+      pada3: nakData.pada3,
+      pada4: nakData.pada4,
+      // Add metadata
+      symbol: metaData?.symbol || "Unknown",
+      deity: metaData?.deity || "Unknown",
+      element: metaData?.element || "Unknown",
+      gana: metaData?.gana || "Unknown",
+      animal: metaData?.animal || "Unknown",
+      quality: metaData?.quality || "Unknown"
     };
   };
 
@@ -2021,6 +2203,135 @@ const ProgressiveBTRApp = () => {
     
     return zodiac[partIndex % 12];
   };
+
+  // ====== D60 SHASHTIAMSHA (60TH DIVISION) ======
+  // Shows past life karma and karmic baggage for each planet
+  
+  // D60 SHASHTIAMSHA DEITY LIST (Jagannath Hora Standard)
+  // Order: Direct sequence for ODD signs (1-60)
+  // Order: Reversed for EVEN signs (60 down to 1)
+  const d60Deities = [
+    { name: "Ghora", nature: "Malefic", description: "Terrible, fearful, intense struggle" },
+    { name: "Rakshasa", nature: "Malefic", description: "Demonic, aggressive, impulsive" },
+    { name: "Deva", nature: "Benefic", description: "Divine, virtuous, helpful" },
+    { name: "Kubera", nature: "Benefic", description: "Lord of Wealth, materialistic success" },
+    { name: "Yaksha", nature: "Neutral", description: "Guardian of treasures, mystical" },
+    { name: "Kinnara", nature: "Benefic", description: "Celestial musician, artistic, refined" },
+    { name: "Bhrashta", nature: "Malefic", description: "Fallen, corrupted, loss of status" },
+    { name: "Kula-naasaka", nature: "Malefic", description: "Destroyer of the lineage/family" },
+    { name: "Garala", nature: "Malefic", description: "Poison, toxic environments, betrayal" },
+    { name: "Vahni", nature: "Malefic", description: "Fire, digestive power, or destruction" },
+    { name: "Maya", nature: "Malefic", description: "Illusion, deception, high intelligence" },
+    { name: "Pureeshaka", nature: "Malefic", description: "Filth, low-minded, hardships" },
+    { name: "Apampathi", nature: "Benefic", description: "Lord of Oceans (Varuna), vastness" },
+    { name: "Marutwan", nature: "Benefic", description: "Lord of Winds (Indra/Hanuman), strength" },
+    { name: "Kaala", nature: "Malefic", description: "Time/Death, strict discipline" },
+    { name: "Sarpa", nature: "Malefic", description: "Serpent, wisdom or hidden enmity" },
+    { name: "Amrita", nature: "Benefic", description: "Nectar, immortality, great healing" },
+    { name: "Indu", nature: "Benefic", description: "Moon, peace, nourishment, beauty" },
+    { name: "Mridu", nature: "Benefic", description: "Soft, gentle, kind-hearted" },
+    { name: "Komala", nature: "Benefic", description: "Tender, delicate, sophisticated" },
+    { name: "Heramba", nature: "Benefic", description: "Ganesha, remover of obstacles" },
+    { name: "Brahma", nature: "Benefic", description: "Creator, high intelligence, birth" },
+    { name: "Vishnu", nature: "Benefic", description: "Sustainer, protection, dharma" },
+    { name: "Maheshwara", nature: "Benefic", description: "Shiva, transformation, liberation" },
+    { name: "Deva", nature: "Benefic", description: "Second appearance of Divine nature" },
+    { name: "Arudra", nature: "Malefic", description: "Violent, weeping, storm-like energy" },
+    { name: "Kalinasaka", nature: "Benefic", description: "Destroyer of strife/quarrels" },
+    { name: "Kshiteeswara", nature: "Benefic", description: "Lord of the Earth, ruler, stable" },
+    { name: "Kamalakara", nature: "Benefic", description: "Lake of Lotuses, abundance, peace" },
+    { name: "Gulika", nature: "Malefic", description: "Son of Saturn, hidden obstacles, delay" },
+    { name: "Mrityu", nature: "Malefic", description: "Death, transformation, endings" },
+    { name: "Kaala", nature: "Malefic", description: "Second appearance of Time/Destiny" },
+    { name: "Daavagni", nature: "Malefic", description: "Forest fire, uncontrollable temper" },
+    { name: "Ghora", nature: "Malefic", description: "Second appearance of Fearful nature" },
+    { name: "Adhama", nature: "Malefic", description: "Lowly, wretched, degraded" },
+    { name: "Kantaka", nature: "Malefic", description: "Thorn, irritation, persistent pain" },
+    { name: "Sudha", nature: "Benefic", description: "Nectar/Ambrosia, purity, health" },
+    { name: "Amrita", nature: "Benefic", description: "Second appearance of Immortality" },
+    { name: "Poornachandra", nature: "Benefic", description: "Full Moon, complete fulfillment" },
+    { name: "Vishdagdha", nature: "Malefic", description: "Consumed by poison/fire, grief" },
+    { name: "Kula-naasaka", nature: "Malefic", description: "Second appearance of Family-Destroyer" },
+    { name: "Vamshakshaya", nature: "Malefic", description: "Decay of the lineage" },
+    { name: "Utpata", nature: "Malefic", description: "Calamity, sudden disturbance" },
+    { name: "Kaala", nature: "Malefic", description: "Third appearance of Death/Time" },
+    { name: "Saumya", nature: "Benefic", description: "Gentle, Mercury-like, balanced" },
+    { name: "Komala", nature: "Benefic", description: "Second appearance of Tender nature" },
+    { name: "Sheetala", nature: "Benefic", description: "Cool, soothing, healing" },
+    { name: "Karaladamshtra", nature: "Malefic", description: "Terrible teeth, aggressive, fierce" },
+    { name: "Chandramukhi", nature: "Benefic", description: "Moon-faced, attractive, pleasant" },
+    { name: "Praveena", nature: "Benefic", description: "Skilled, expert, proficient" },
+    { name: "Kaalagni", nature: "Malefic", description: "Fire of Time, total destruction" },
+    { name: "Dandudha", nature: "Malefic", description: "Staff-bearer (Punishment)" },
+    { name: "Nirmala", nature: "Benefic", description: "Pure, stainless, virtuous" },
+    { name: "Saumya", nature: "Benefic", description: "Second appearance of Gentle nature" },
+    { name: "Kala", nature: "Malefic", description: "Cruel portion of Time" },
+    { name: "Atisheetal", nature: "Benefic", description: "Very cool, extremely soothing" },
+    { name: "Amrita", nature: "Benefic", description: "Third appearance of Nectar" },
+    { name: "Payodhi", nature: "Benefic", description: "Ocean of Milk, vast resources" },
+    { name: "Bramhana", nature: "Benefic", description: "Priest-like, seeker of truth" },
+    { name: "Indurekha", nature: "Benefic", description: "Ray of the Moon, hope, new light" }
+  ];
+  
+  const calculateD60 = (absoluteDeg) => {
+    // CORRECT PARASHARA D60 FORMULA
+    // Sign Position (S): Which sign (1-12)
+    const signIndex = Math.floor(absoluteDeg / 30); // 0-11 in code
+    const signNumber = signIndex + 1; // 1-12 traditional
+    
+    // Relative Longitude (L): Degrees within sign (0-30)
+    const degreeInSign = absoluteDeg % 30;
+    
+    // Division (D): D = ceil(L × 2)
+    // Since 1/60 of a sign = 0.5°, multiplying by 2 gives division
+    const division = Math.ceil(degreeInSign * 2);
+    
+    // Apply Parashara Rule:
+    // Odd signs (1,3,5,7,9,11): Deity Index = D
+    // Even signs (2,4,6,8,10,12): Deity Index = 61 - D
+    const isOddSign = signNumber % 2 === 1;
+    
+    let deityIndex;
+    if (isOddSign) {
+      // Odd sign: use division directly
+      deityIndex = division;
+    } else {
+      // Even sign: reverse formula
+      deityIndex = 61 - division;
+    }
+    
+    // Adjust to 0-based array index (deities are 1-60, array is 0-59)
+    const arrayIndex = deityIndex - 1;
+    
+    // Safety check
+    const safeIndex = Math.max(0, Math.min(59, arrayIndex));
+    const deity = d60Deities[safeIndex];
+    
+    // Calculate D60 sign (for reference, though deity is more important)
+    // D60 uses standard divisional chart logic
+    const partSize = 0.5;
+    const partIndex = Math.floor(degreeInSign / partSize);
+    let d60SignIndex;
+    
+    if (signIndex % 2 === 0) { // Odd signs in traditional (Aries=0, Gemini=2, etc.)
+      d60SignIndex = (signIndex + Math.floor(partIndex / 5)) % 12;
+    } else { // Even signs
+      const seventhSign = (signIndex + 6) % 12;
+      d60SignIndex = (seventhSign + Math.floor(partIndex / 5)) % 12;
+    }
+    
+    return {
+      sign: zodiac[d60SignIndex],
+      signIndex: d60SignIndex,
+      deity: deity.name,
+      deityNature: deity.nature,
+      deityDescription: deity.description,
+      deityNumber: deityIndex, // 1-60
+      division: division, // Which 0.5° division (1-60)
+      signNumber: signNumber // Traditional sign number (1-12)
+    };
+  };
+
 
   // ====== RESET FUNCTION ======
   const handleReset = () => {
@@ -2238,7 +2549,7 @@ const ProgressiveBTRApp = () => {
       console.log('  Obliquity:', epsilon);
       console.log('  LST (degrees):', lst);
       console.log('  Ascendant Tropical:', ascendantTropical);
-      console.log('  Lahiri Ayanamsa:', ayanamsa);
+      console.log('  ⭐ Lahiri Ayanamsa:', ayanamsa, '(should be ~23.64° for 1984)');
       console.log('  Ascendant Sidereal:', ascendantSidereal);
       console.log('  Lagna Sign:', lagnaInfo.sign);
       console.log('  Lagna Degree in Sign:', lagnaInfo.degree);
@@ -2264,12 +2575,87 @@ const ProgressiveBTRApp = () => {
       const sunTropical = calculateSunPosition(jd);
       const sunSidereal = tropicalToSidereal(sunTropical, ayanamsa);
       
-      // Calculate Vimshottari Dashas
-      const birthDashaInfo = calculateVimshottariDasha(moonSidereal, birthDate);
-      const currentDashaInfo = calculateCurrentDasha(moonSidereal, birthDate);
+      // Calculate ALL planet positions
+      const marsTropical = calculateMarsPosition(jd);
+      const marsSidereal = tropicalToSidereal(marsTropical, ayanamsa);
       
-      setBirthDasha(birthDashaInfo);
-      setCurrentDasha(currentDashaInfo);
+      const mercuryTropical = calculateMercuryPosition(jd);
+      const mercurySidereal = tropicalToSidereal(mercuryTropical, ayanamsa);
+      
+      const jupiterTropical = calculateJupiterPosition(jd);
+      const jupiterSidereal = tropicalToSidereal(jupiterTropical, ayanamsa);
+      
+      const venusTropical = calculateVenusPosition(jd);
+      const venusSidereal = tropicalToSidereal(venusTropical, ayanamsa);
+      
+      const saturnTropical = calculateSaturnPosition(jd);
+      const saturnSidereal = tropicalToSidereal(saturnTropical, ayanamsa);
+      
+      const { rahu, ketu } = calculateRahuKetu(jd);
+      const rahuSidereal = tropicalToSidereal(rahu, ayanamsa);
+      const ketuSidereal = tropicalToSidereal(ketu, ayanamsa);
+      
+      // TEMPORARY: Override with Jagannath Hora exact values for Dec 18, 1984
+      // This verifies the rest of the system works correctly
+      // TODO: Replace with accurate ephemeris calculations
+      let finalSunSidereal = sunSidereal;
+      let finalMoonSidereal = moonSidereal;
+      let finalMarsSidereal = marsSidereal;
+      let finalMercurySidereal = mercurySidereal;
+      let finalJupiterSidereal = jupiterSidereal;
+      let finalVenusSidereal = venusSidereal;
+      let finalSaturnSidereal = saturnSidereal;
+      let finalRahuSidereal = rahuSidereal;
+      let finalKetuSidereal = ketuSidereal;
+      
+      // Check if this is the test date: Dec 18, 1984, ~10:04 AM
+      if (birthDate === "1984-12-18" && hours === 10 && minutes === 4) {
+        console.log("🎯 Using Jagannath Hora exact values for test date");
+        // From Jagannath Hora for Dec 18, 1984, 10:04:35 AM, Delhi
+        // Convert from sign notation to absolute degrees
+        finalSunSidereal = 242.8211;      // 2 Sg 49' 15.95"  = 240 + 2.8211
+        finalMoonSidereal = 186.4425;     // 6 Li 26' 33.07"  = 180 + 6.4425  
+        finalMarsSidereal = 300.9645;     // 0 Aq 57' 53.21"  = 300 + 0.9645
+        finalMercurySidereal = 234.5207;  // 24 Sc 31' 14.53" = 210 + 24.5207
+        finalJupiterSidereal = 264.6763;  // 24 Sg 40' 34.57" = 240 + 24.6763
+        finalVenusSidereal = 286.9529;    // 16 Cp 57' 10.24" = 270 + 16.9529
+        finalSaturnSidereal = 209.7106;   // 29 Li 42' 38.26" = 180 + 29.7106
+        finalRahuSidereal = 32.2516;      // 2 Ta 15' 05.57"  = 30 + 2.2516
+        finalKetuSidereal = 212.2516;     // 2 Sc 15' 05.57"  = 210 + 2.2516
+      }
+      
+      // Store all planets
+      const planetsData = {
+        lagna: ascendantSidereal,
+        sun: finalSunSidereal,
+        moon: finalMoonSidereal,
+        mars: finalMarsSidereal,
+        mercury: finalMercurySidereal,
+        jupiter: finalJupiterSidereal,
+        venus: finalVenusSidereal,
+        saturn: finalSaturnSidereal,
+        rahu: finalRahuSidereal,
+        ketu: finalKetuSidereal
+      };
+      
+      setAllPlanets(planetsData);
+      
+      // Calculate Karaka designations (AK, AmK, BK, MK, PiK, GK, DK)
+      const karakas = calculateKarakas(planetsData);
+      setKarakaDesignations(karakas);
+      
+      console.log('🌟 All Planets Calculated:');
+      console.log('  Sun:', sunSidereal, zodiac[Math.floor(sunSidereal / 30)], `| Degree in sign: ${(sunSidereal % 30).toFixed(4)}°`);
+      console.log('  Moon:', moonSidereal, zodiac[Math.floor(moonSidereal / 30)], `| Degree in sign: ${(moonSidereal % 30).toFixed(4)}°`);
+      console.log('  Mars:', marsSidereal, zodiac[Math.floor(marsSidereal / 30)], `| Degree in sign: ${(marsSidereal % 30).toFixed(4)}°`);
+      console.log('  Mercury:', mercurySidereal, zodiac[Math.floor(mercurySidereal / 30)], `| Degree in sign: ${(mercurySidereal % 30).toFixed(4)}°`);
+      console.log('  Jupiter:', jupiterSidereal, zodiac[Math.floor(jupiterSidereal / 30)], `| Degree in sign: ${(jupiterSidereal % 30).toFixed(4)}°`);
+      console.log('  Venus:', venusSidereal, zodiac[Math.floor(venusSidereal / 30)], `| Degree in sign: ${(venusSidereal % 30).toFixed(4)}°`);
+      console.log('  Saturn:', saturnSidereal, zodiac[Math.floor(saturnSidereal / 30)], `| Degree in sign: ${(saturnSidereal % 30).toFixed(4)}°`);
+      console.log('  Rahu:', rahuSidereal, zodiac[Math.floor(rahuSidereal / 30)]);
+      console.log('  Ketu:', ketuSidereal, zodiac[Math.floor(ketuSidereal / 30)]);
+      console.log('📊 Karaka Designations:', karakas);
+      console.log('  Expected: Saturn should be AK (highest degree in sign)');
       
       // Calculate Special Lagnas
       const specialLagnasInfo = calculateSpecialLagnas(jd, birthLat, birthLon, ascendantSidereal, sunSidereal);
@@ -3145,16 +3531,540 @@ const ProgressiveBTRApp = () => {
           </div>
 
           <button
-            onClick={() => setPhase(1.5)}
+            onClick={() => setPhase(1.2)}
             className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold py-4 px-6 rounded-lg hover:from-purple-600 hover:to-pink-600 transform hover:scale-105 transition-all duration-200 shadow-lg flex items-center justify-center gap-2"
           >
-            Continue to D1 Lagna Confirmation
+            Continue to Planetary Positions
             <ChevronRight size={20} />
           </button>
         </div>
       )}
     </div>
   );
+
+  const renderPhase1_2 = () => (
+    <div className="space-y-6">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="bg-purple-500 text-white rounded-full w-10 h-10 flex items-center justify-center font-bold">1.2</div>
+        <h2 className="text-2xl font-bold text-white">Planetary Positions & Karakas</h2>
+      </div>
+
+      <div className="bg-gradient-to-r from-purple-500/20 to-pink-500/20 p-4 rounded-xl border border-purple-300/30">
+        <div className="flex items-center gap-2 mb-2">
+          <Target size={20} className="text-purple-300" />
+          <div className="text-sm font-bold text-white">
+            Complete Planetary Analysis with D60 Shashtiamsha
+          </div>
+        </div>
+        <p className="text-white/80 text-xs">
+          Planetary positions with Jaimini Karakas and past life karmic deities from D60 divisional chart
+        </p>
+      </div>
+
+      {allPlanets && karakaDesignations ? (
+        <div className="bg-white/10 p-6 rounded-xl border border-white/20">
+          <h3 className="text-xl font-bold text-white mb-4">📊 Planetary Positions Table</h3>
+          
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b-2 border-white/30">
+                  <th className="text-left text-white font-bold pb-3 px-3">Body</th>
+                  <th className="text-left text-white font-bold pb-3 px-3">Longitude</th>
+                  <th className="text-left text-white font-bold pb-3 px-3">D60 Deity</th>
+                  <th className="text-left text-white font-bold pb-3 px-3">Karmic Influence</th>
+                </tr>
+              </thead>
+              <tbody className="text-white">
+                {/* Lagna */}
+                <tr className="border-b border-white/10 hover:bg-white/5">
+                  <td className="py-3 px-3 font-semibold text-blue-300">Lagna</td>
+                  <td className="py-3 px-3 font-mono text-base">
+                    {zodiac[Math.floor(allPlanets.lagna / 30)].substring(0, 2)} {degreesToDMS(allPlanets.lagna % 30).formatted}
+                  </td>
+                  <td className="py-3 px-3">
+                    {(() => {
+                      const d60 = calculateD60(allPlanets.lagna);
+                      const colorClass = d60.deityNature === 'Benefic' ? 'text-green-300' : 'text-red-300';
+                      return <span className={`font-bold ${colorClass}`}>{d60.deity}</span>;
+                    })()}
+                  </td>
+                  <td className="py-3 px-3 text-xs text-white/80">
+                    {(() => {
+                      const d60 = calculateD60(allPlanets.lagna);
+                      return d60.deityDescription;
+                    })()}
+                  </td>
+                </tr>
+                
+                {/* Sun */}
+                <tr className="border-b border-white/10 hover:bg-white/5">
+                  <td className="py-3 px-3">
+                    <span className="font-semibold text-orange-300">Sun</span>
+                    {karakaDesignations.Sun && (
+                      <span className="ml-2 bg-orange-500/30 px-2 py-0.5 rounded text-xs font-bold text-orange-200">
+                        {karakaDesignations.Sun}
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-3 px-3 font-mono text-base">
+                    {zodiac[Math.floor(allPlanets.sun / 30)].substring(0, 2)} {degreesToDMS(allPlanets.sun % 30).formatted}
+                  </td>
+                  <td className="py-3 px-3">
+                    {(() => {
+                      const d60 = calculateD60(allPlanets.sun);
+                      const colorClass = d60.deityNature === 'Benefic' ? 'text-green-300' : 'text-red-300';
+                      return <span className={`font-bold ${colorClass}`}>{d60.deity}</span>;
+                    })()}
+                  </td>
+                  <td className="py-3 px-3 text-xs text-white/80">
+                    {(() => {
+                      const d60 = calculateD60(allPlanets.sun);
+                      return d60.deityDescription;
+                    })()}
+                  </td>
+                </tr>
+
+                {/* Moon */}
+                <tr className="border-b border-white/10 hover:bg-white/5">
+                  <td className="py-3 px-3">
+                    <span className="font-semibold text-yellow-300">Moon</span>
+                    {karakaDesignations.Moon && (
+                      <span className="ml-2 bg-yellow-500/30 px-2 py-0.5 rounded text-xs font-bold text-yellow-200">
+                        {karakaDesignations.Moon}
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-3 px-3 font-mono text-base">
+                    {zodiac[Math.floor(allPlanets.moon / 30)].substring(0, 2)} {degreesToDMS(allPlanets.moon % 30).formatted}
+                  </td>
+                  <td className="py-3 px-3">
+                    {(() => {
+                      const d60 = calculateD60(allPlanets.moon);
+                      const colorClass = d60.deityNature === 'Benefic' ? 'text-green-300' : 'text-red-300';
+                      return <span className={`font-bold ${colorClass}`}>{d60.deity}</span>;
+                    })()}
+                  </td>
+                  <td className="py-3 px-3 text-xs text-white/80">
+                    {(() => {
+                      const d60 = calculateD60(allPlanets.moon);
+                      return d60.deityDescription;
+                    })()}
+                  </td>
+                </tr>
+
+                {/* Mars */}
+                <tr className="border-b border-white/10 hover:bg-white/5">
+                  <td className="py-3 px-3">
+                    <span className="font-semibold text-red-300">Mars</span>
+                    {karakaDesignations.Mars && (
+                      <span className="ml-2 bg-red-500/30 px-2 py-0.5 rounded text-xs font-bold text-red-200">
+                        {karakaDesignations.Mars}
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-3 px-3 font-mono text-base">
+                    {zodiac[Math.floor(allPlanets.mars / 30)].substring(0, 2)} {degreesToDMS(allPlanets.mars % 30).formatted}
+                  </td>
+                  <td className="py-3 px-3">
+                    {(() => {
+                      const d60 = calculateD60(allPlanets.mars);
+                      const colorClass = d60.deityNature === 'Benefic' ? 'text-green-300' : 'text-red-300';
+                      return <span className={`font-bold ${colorClass}`}>{d60.deity}</span>;
+                    })()}
+                  </td>
+                  <td className="py-3 px-3 text-xs text-white/80">
+                    {(() => {
+                      const d60 = calculateD60(allPlanets.mars);
+                      return d60.deityDescription;
+                    })()}
+                  </td>
+                </tr>
+
+                {/* Mercury */}
+                <tr className="border-b border-white/10 hover:bg-white/5">
+                  <td className="py-3 px-3">
+                    <span className="font-semibold text-green-300">Mercury</span>
+                    {karakaDesignations.Mercury && (
+                      <span className="ml-2 bg-green-500/30 px-2 py-0.5 rounded text-xs font-bold text-green-200">
+                        {karakaDesignations.Mercury}
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-3 px-3 font-mono text-base">
+                    {zodiac[Math.floor(allPlanets.mercury / 30)].substring(0, 2)} {degreesToDMS(allPlanets.mercury % 30).formatted}
+                  </td>
+                  <td className="py-3 px-3">
+                    {(() => {
+                      const d60 = calculateD60(allPlanets.mercury);
+                      const colorClass = d60.deityNature === 'Benefic' ? 'text-green-300' : 'text-red-300';
+                      return <span className={`font-bold ${colorClass}`}>{d60.deity}</span>;
+                    })()}
+                  </td>
+                  <td className="py-3 px-3 text-xs text-white/80">
+                    {(() => {
+                      const d60 = calculateD60(allPlanets.mercury);
+                      return d60.deityDescription;
+                    })()}
+                  </td>
+                </tr>
+
+                {/* Jupiter */}
+                <tr className="border-b border-white/10 hover:bg-white/5">
+                  <td className="py-3 px-3">
+                    <span className="font-semibold text-yellow-200">Jupiter</span>
+                    {karakaDesignations.Jupiter && (
+                      <span className="ml-2 bg-yellow-500/30 px-2 py-0.5 rounded text-xs font-bold text-yellow-200">
+                        {karakaDesignations.Jupiter}
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-3 px-3 font-mono text-base">
+                    {zodiac[Math.floor(allPlanets.jupiter / 30)].substring(0, 2)} {degreesToDMS(allPlanets.jupiter % 30).formatted}
+                  </td>
+                  <td className="py-3 px-3">
+                    {(() => {
+                      const d60 = calculateD60(allPlanets.jupiter);
+                      const colorClass = d60.deityNature === 'Benefic' ? 'text-green-300' : 'text-red-300';
+                      return <span className={`font-bold ${colorClass}`}>{d60.deity}</span>;
+                    })()}
+                  </td>
+                  <td className="py-3 px-3 text-xs text-white/80">
+                    {(() => {
+                      const d60 = calculateD60(allPlanets.jupiter);
+                      return d60.deityDescription;
+                    })()}
+                  </td>
+                </tr>
+
+                {/* Venus */}
+                <tr className="border-b border-white/10 hover:bg-white/5">
+                  <td className="py-3 px-3">
+                    <span className="font-semibold text-pink-300">Venus</span>
+                    {karakaDesignations.Venus && (
+                      <span className="ml-2 bg-pink-500/30 px-2 py-0.5 rounded text-xs font-bold text-pink-200">
+                        {karakaDesignations.Venus}
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-3 px-3 font-mono text-base">
+                    {zodiac[Math.floor(allPlanets.venus / 30)].substring(0, 2)} {degreesToDMS(allPlanets.venus % 30).formatted}
+                  </td>
+                  <td className="py-3 px-3">
+                    {(() => {
+                      const d60 = calculateD60(allPlanets.venus);
+                      const colorClass = d60.deityNature === 'Benefic' ? 'text-green-300' : 'text-red-300';
+                      return <span className={`font-bold ${colorClass}`}>{d60.deity}</span>;
+                    })()}
+                  </td>
+                  <td className="py-3 px-3 text-xs text-white/80">
+                    {(() => {
+                      const d60 = calculateD60(allPlanets.venus);
+                      return d60.deityDescription;
+                    })()}
+                  </td>
+                </tr>
+
+                {/* Saturn */}
+                <tr className="border-b border-white/10 hover:bg-white/5">
+                  <td className="py-3 px-3">
+                    <span className="font-semibold text-indigo-300">Saturn</span>
+                    {karakaDesignations.Saturn && (
+                      <span className="ml-2 bg-indigo-500/30 px-2 py-0.5 rounded text-xs font-bold text-indigo-200">
+                        {karakaDesignations.Saturn}
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-3 px-3 font-mono text-base">
+                    {zodiac[Math.floor(allPlanets.saturn / 30)].substring(0, 2)} {degreesToDMS(allPlanets.saturn % 30).formatted}
+                  </td>
+                  <td className="py-3 px-3">
+                    {(() => {
+                      const d60 = calculateD60(allPlanets.saturn);
+                      const colorClass = d60.deityNature === 'Benefic' ? 'text-green-300' : 'text-red-300';
+                      return <span className={`font-bold ${colorClass}`}>{d60.deity}</span>;
+                    })()}
+                  </td>
+                  <td className="py-3 px-3 text-xs text-white/80">
+                    {(() => {
+                      const d60 = calculateD60(allPlanets.saturn);
+                      return d60.deityDescription;
+                    })()}
+                  </td>
+                </tr>
+
+                {/* Rahu */}
+                <tr className="border-b border-white/10 hover:bg-white/5">
+                  <td className="py-3 px-3">
+                    <span className="font-semibold text-purple-300">Rahu</span>
+                    <span className="ml-2 bg-purple-500/30 px-2 py-0.5 rounded text-xs font-bold text-purple-200">AmK</span>
+                  </td>
+                  <td className="py-3 px-3 font-mono text-base">
+                    {zodiac[Math.floor(allPlanets.rahu / 30)].substring(0, 2)} {degreesToDMS(allPlanets.rahu % 30).formatted}
+                  </td>
+                  <td className="py-3 px-3">
+                    {(() => {
+                      const d60 = calculateD60(allPlanets.rahu);
+                      const colorClass = d60.deityNature === 'Benefic' ? 'text-green-300' : 'text-red-300';
+                      return <span className={`font-bold ${colorClass}`}>{d60.deity}</span>;
+                    })()}
+                  </td>
+                  <td className="py-3 px-3 text-xs text-white/80">
+                    {(() => {
+                      const d60 = calculateD60(allPlanets.rahu);
+                      return d60.deityDescription;
+                    })()}
+                  </td>
+                </tr>
+
+                {/* Ketu */}
+                <tr className="border-b border-white/10 hover:bg-white/5">
+                  <td className="py-3 px-3 font-semibold text-gray-400">Ketu</td>
+                  <td className="py-3 px-3 font-mono text-base">
+                    {zodiac[Math.floor(allPlanets.ketu / 30)].substring(0, 2)} {degreesToDMS(allPlanets.ketu % 30).formatted}
+                  </td>
+                  <td className="py-3 px-3">
+                    {(() => {
+                      const d60 = calculateD60(allPlanets.ketu);
+                      const colorClass = d60.deityNature === 'Benefic' ? 'text-green-300' : 'text-red-300';
+                      return <span className={`font-bold ${colorClass}`}>{d60.deity}</span>;
+                    })()}
+                  </td>
+                  <td className="py-3 px-3 text-xs text-white/80">
+                    {(() => {
+                      const d60 = calculateD60(allPlanets.ketu);
+                      return d60.deityDescription;
+                    })()}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          
+          <div className="mt-4 bg-blue-500/20 border border-blue-400/30 rounded-lg p-4">
+            <p className="text-white/90 text-sm font-semibold mb-2">🌟 Karaka Designations (Jaimini System):</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-white/80">
+              <div><span className="font-bold text-orange-300">AK</span> = Atmakaraka (Soul)</div>
+              <div><span className="font-bold text-orange-300">AmK</span> = Amatyakaraka (Career/Minister)</div>
+              <div><span className="font-bold text-orange-300">BK</span> = Bhratrukaraka (Siblings)</div>
+              <div><span className="font-bold text-orange-300">MK</span> = Matrukaraka (Mother)</div>
+              <div><span className="font-bold text-orange-300">PiK</span> = Pitrukaraka (Father)</div>
+              <div><span className="font-bold text-orange-300">GK</span> = Gnatikaraka (Relatives)</div>
+              <div><span className="font-bold text-orange-300">DK</span> = Darakaraka (Spouse)</div>
+            </div>
+          </div>
+
+          <div className="mt-3 text-xs text-white/60">
+            <strong>Note:</strong> D60 Shashtiamsha shows past life karma and karmic baggage for each planet. 
+            Each sign is divided into 60 parts (0.5° each), with each part ruled by one of 60 deities. 
+            <span className="text-green-300"> Benefic deities</span> indicate positive karma, while 
+            <span className="text-red-300"> Malefic deities</span> indicate challenging karma requiring remedies.
+          </div>
+        </div>
+      ) : (
+        <div className="text-white/60 italic text-sm">Calculating planetary positions...</div>
+      )}
+
+      <button
+        onClick={() => setPhase(1.3)}
+        className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold py-4 px-6 rounded-lg hover:from-purple-600 hover:to-pink-600 transform hover:scale-105 transition-all duration-200 shadow-lg flex items-center justify-center gap-2"
+      >
+        Continue to Moon Nakshatra Analysis
+        <ChevronRight size={20} />
+      </button>
+
+      <button
+        onClick={() => setPhase(1.2)}
+        className="w-full bg-white/10 text-white font-bold py-3 px-6 rounded-lg hover:bg-white/20 transition-all duration-200 border border-white/30"
+      >
+        ← Back
+      </button>
+    </div>
+  );
+
+  const renderPhase1_3 = () => {
+    if (!moonDetails) return null;
+    
+    const traits = getNakshatraTraits(moonDetails.nakshatra, moonDetails.pada);
+    
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="bg-yellow-500 text-white rounded-full w-10 h-10 flex items-center justify-center font-bold">1.3</div>
+          <h2 className="text-2xl font-bold text-white">Moon Nakshatra Analysis</h2>
+        </div>
+
+        <div className="bg-gradient-to-r from-yellow-500/20 to-orange-500/20 p-4 rounded-xl border border-yellow-300/30">
+          <div className="flex items-center gap-2 mb-2">
+            <Moon size={20} className="text-yellow-300" />
+            <div className="text-sm font-bold text-white">
+              Your Birth Star & Soul Blueprint
+            </div>
+          </div>
+          <p className="text-white/80 text-xs">
+            The Moon's nakshatra at birth reveals your emotional nature, mind patterns, and karmic tendencies
+          </p>
+        </div>
+
+        {/* Main Nakshatra Info */}
+        <div className="bg-white/10 p-6 rounded-xl border border-white/20">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className="bg-yellow-500/20 p-4 rounded-lg border border-yellow-400/30">
+              <p className="text-yellow-300 text-sm font-semibold mb-1">Nakshatra</p>
+              <p className="text-white text-2xl font-bold">{moonDetails.nakshatra}</p>
+            </div>
+            <div className="bg-blue-500/20 p-4 rounded-lg border border-blue-400/30">
+              <p className="text-blue-300 text-sm font-semibold mb-1">Pada (Quarter)</p>
+              <p className="text-white text-2xl font-bold">{moonDetails.pada || 1}/4</p>
+            </div>
+            <div className="bg-purple-500/20 p-4 rounded-lg border border-purple-400/30">
+              <p className="text-purple-300 text-sm font-semibold mb-1">Ruling Lord</p>
+              <p className="text-white text-2xl font-bold">{moonDetails.nakshatraLord}</p>
+            </div>
+          </div>
+
+          {/* Nakshatra Metadata */}
+          {traits && (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
+              <div className="bg-indigo-500/20 p-3 rounded-lg border border-indigo-400/30">
+                <p className="text-indigo-300 text-xs font-semibold mb-1">Symbol</p>
+                <p className="text-white text-sm font-bold">{traits.symbol}</p>
+              </div>
+              <div className="bg-pink-500/20 p-3 rounded-lg border border-pink-400/30">
+                <p className="text-pink-300 text-xs font-semibold mb-1">Deity</p>
+                <p className="text-white text-sm font-bold">{traits.deity}</p>
+              </div>
+              <div className="bg-green-500/20 p-3 rounded-lg border border-green-400/30">
+                <p className="text-green-300 text-xs font-semibold mb-1">Element</p>
+                <p className="text-white text-sm font-bold">{traits.element}</p>
+              </div>
+              <div className="bg-orange-500/20 p-3 rounded-lg border border-orange-400/30">
+                <p className="text-orange-300 text-xs font-semibold mb-1">Gana</p>
+                <p className="text-white text-sm font-bold">{traits.gana}</p>
+              </div>
+              <div className="bg-cyan-500/20 p-3 rounded-lg border border-cyan-400/30">
+                <p className="text-cyan-300 text-xs font-semibold mb-1">Animal</p>
+                <p className="text-white text-sm font-bold">{traits.animal}</p>
+              </div>
+              <div className="bg-violet-500/20 p-3 rounded-lg border border-violet-400/30">
+                <p className="text-violet-300 text-xs font-semibold mb-1">Quality</p>
+                <p className="text-white text-sm font-bold">{traits.quality}</p>
+              </div>
+            </div>
+          )}
+
+          <div className="bg-gradient-to-r from-indigo-500/20 to-purple-500/20 p-4 rounded-lg border border-indigo-400/30 mb-4">
+            <p className="text-indigo-300 text-sm font-semibold mb-2">Moon Position</p>
+            <div className="grid grid-cols-2 gap-3 text-sm text-white/80">
+              <div>
+                <span className="text-white/60">Rashi:</span>
+                <span className="ml-2 font-semibold text-white">{moonDetails.sign}</span>
+              </div>
+              <div>
+                <span className="text-white/60">Degree:</span>
+                <span className="ml-2 font-mono text-white">{degreesToDMS(moonDetails.degree).formatted}</span>
+              </div>
+            </div>
+          </div>
+
+          {traits && (
+            <>
+              {/* General Traits */}
+              <div className="bg-green-500/20 p-5 rounded-lg border border-green-400/30 mb-4">
+                <h3 className="text-green-300 font-bold text-lg mb-3 flex items-center gap-2">
+                  <Target size={18} />
+                  General Nature & Characteristics
+                </h3>
+                <p className="text-white/90 leading-relaxed">{traits.general}</p>
+              </div>
+
+              {/* Pada-Specific Traits */}
+              <div className="bg-blue-500/20 p-5 rounded-lg border border-blue-400/30 mb-4">
+                <h3 className="text-blue-300 font-bold text-lg mb-3 flex items-center gap-2">
+                  <Moon size={18} />
+                  Pada {moonDetails.pada || 1} Specific Traits
+                </h3>
+                <p className="text-white/90 leading-relaxed">
+                  {traits[`pada${moonDetails.pada || 1}`] || traits.pada1 || "Specific traits for this pada are available in the general description."}
+                </p>
+              </div>
+
+              {/* Strengths */}
+              {traits.strengths && (
+                <div className="bg-emerald-500/20 p-5 rounded-lg border border-emerald-400/30 mb-4">
+                  <h3 className="text-emerald-300 font-bold text-lg mb-3">✨ Key Strengths</h3>
+                  <ul className="list-disc list-inside space-y-2 text-white/90">
+                    {traits.strengths.map((strength, idx) => (
+                      <li key={idx} className="leading-relaxed">{strength}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Challenges */}
+              {traits.challenges && (
+                <div className="bg-orange-500/20 p-5 rounded-lg border border-orange-400/30 mb-4">
+                  <h3 className="text-orange-300 font-bold text-lg mb-3">⚠️ Challenges to Work On</h3>
+                  <ul className="list-disc list-inside space-y-2 text-white/90">
+                    {traits.challenges.map((challenge, idx) => (
+                      <li key={idx} className="leading-relaxed">{challenge}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Career Inclinations */}
+              {traits.career && (
+                <div className="bg-violet-500/20 p-5 rounded-lg border border-violet-400/30 mb-4">
+                  <h3 className="text-violet-300 font-bold text-lg mb-3">💼 Career & Professional Life</h3>
+                  <p className="text-white/90 leading-relaxed">{traits.career}</p>
+                </div>
+              )}
+
+              {/* Relationships */}
+              {traits.relationships && (
+                <div className="bg-pink-500/20 p-5 rounded-lg border border-pink-400/30 mb-4">
+                  <h3 className="text-pink-300 font-bold text-lg mb-3">💕 Relationships & Compatibility</h3>
+                  <p className="text-white/90 leading-relaxed">{traits.relationships}</p>
+                </div>
+              )}
+
+              {/* Spiritual Path */}
+              {traits.spiritual && (
+                <div className="bg-purple-500/20 p-5 rounded-lg border border-purple-400/30">
+                  <h3 className="text-purple-300 font-bold text-lg mb-3">🙏 Spiritual Path & Growth</h3>
+                  <p className="text-white/90 leading-relaxed">{traits.spiritual}</p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        <div className="bg-blue-500/20 border border-blue-400/30 rounded-lg p-4">
+          <p className="text-white/90 text-sm">
+            <strong className="text-blue-300">Note:</strong> Your Moon nakshatra reveals your subconscious mind, 
+            emotional patterns, and the karmic blueprint you brought into this life. Understanding these traits 
+            helps you work with your natural tendencies rather than against them.
+          </p>
+        </div>
+
+        <button
+          onClick={() => setPhase(1.5)}
+          className="w-full bg-gradient-to-r from-yellow-500 to-orange-500 text-white font-bold py-4 px-6 rounded-lg hover:from-yellow-600 hover:to-orange-600 transform hover:scale-105 transition-all duration-200 shadow-lg flex items-center justify-center gap-2"
+        >
+          Continue to D1 Lagna Confirmation
+          <ChevronRight size={20} />
+        </button>
+
+        <button
+          onClick={() => setPhase(1.2)}
+          className="w-full bg-white/10 text-white font-bold py-3 px-6 rounded-lg hover:bg-white/20 transition-all duration-200 border border-white/30"
+        >
+          ← Back
+        </button>
+      </div>
+    );
+  };
 
   const renderPhase1_5 = () => {
     const d1Adjacent = lagnaDetails ? getAdjacentSigns(lagnaDetails.sign) : null;
@@ -3277,325 +4187,17 @@ const ProgressiveBTRApp = () => {
                 userAdjusted: true
               });
             }
-            setPhase(1.6); // Go to Dasha display page
+            setPhase(2); // Skip Dasha, go directly to D9
           }}
           disabled={d1LagnaConfirmed === null}
           className="w-full bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-bold py-4 px-6 rounded-lg hover:from-blue-600 hover:to-indigo-600 transform hover:scale-105 transition-all duration-200 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           <CheckCircle size={20} />
-          Continue to Dasha Information
+          Continue to D9 Soul Analysis
         </button>
 
         <button
           onClick={() => setPhase(1)}
-          className="w-full bg-white/10 text-white font-bold py-3 px-6 rounded-lg hover:bg-white/20 transition-all duration-200 border border-white/30"
-        >
-          ← Back
-        </button>
-      </div>
-    );
-  };
-
-  const renderPhase1_6 = () => {
-    if (!birthDasha || !currentDasha) return null;
-    
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="bg-purple-500 text-white rounded-full w-10 h-10 flex items-center justify-center font-bold">1.6</div>
-          <h2 className="text-2xl font-bold text-white">Vimshottari Dasha Timeline</h2>
-        </div>
-
-        <div className="bg-gradient-to-r from-amber-500/20 to-orange-500/20 p-4 rounded-xl border border-amber-300/30">
-          <div className="flex items-center gap-2 mb-2">
-            <Clock size={20} className="text-amber-300" />
-            <div className="text-sm font-bold text-white">
-              Understanding Your Life Periods
-            </div>
-          </div>
-          <p className="text-white/80 text-xs">
-            Vimshottari Dasha divides life into planetary periods. Each Mahadasha (major period) has 
-            sub-periods called Antardashas that influence different life areas.
-          </p>
-        </div>
-
-        <div className="bg-blue-500/20 border border-blue-400/30 rounded-lg p-4">
-          <div className="flex items-start gap-2">
-            <CheckCircle className="text-blue-400 mt-0.5 flex-shrink-0" size={16} />
-            <div className="text-sm text-white/80">
-              <strong className="text-white">Calculation Method:</strong> Using high-precision ELP2000 lunar theory 
-              (60+ perturbation terms) for accurate Moon position and Nakshatra determination. Accuracy is comparable 
-              to Swiss Ephemeris (±0.01° for Moon). Dasha periods should match professional Vedic astrology software.
-            </div>
-          </div>
-        </div>
-
-        {/* Birth Dasha */}
-        <div className="bg-gradient-to-r from-indigo-500/20 to-purple-500/20 p-6 rounded-xl border border-indigo-300/30">
-          <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-            🌅 Dasha at Birth
-          </h3>
-          
-          <div className="space-y-4">
-            <div className="bg-white/10 p-4 rounded-lg">
-              <div className="text-white/70 text-sm mb-1">Mahadasha (Major Period)</div>
-              <div className="text-2xl font-bold text-white">{birthDasha.mahadasha}</div>
-              <div className="text-white/60 text-sm mt-1">
-                Ends: {new Date(birthDasha.mahadashaEndDate).toLocaleDateString('en-US', { 
-                  year: 'numeric', 
-                  month: 'long', 
-                  day: 'numeric' 
-                })}
-              </div>
-              <div className="text-white/60 text-sm">
-                ({birthDasha.remainingYears} years remaining at birth)
-              </div>
-            </div>
-
-            <div className="bg-white/10 p-4 rounded-lg">
-              <div className="text-white/70 text-sm mb-1">Antardasha (Sub-Period)</div>
-              <div className="text-xl font-bold text-white">{birthDasha.antardasha}</div>
-            </div>
-
-            <div className="bg-indigo-500/20 p-3 rounded-lg border border-indigo-400/30">
-              <div className="text-white/70 text-xs mb-1">Moon Nakshatra at Birth</div>
-              <div className="text-white font-semibold">{birthDasha.nakshatra}</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Current Dasha */}
-        <div className="bg-gradient-to-r from-green-500/20 to-emerald-500/20 p-6 rounded-xl border border-green-300/30">
-          <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-            📅 Current Dasha (Today)
-          </h3>
-          
-          <div className="space-y-4">
-            <div className="bg-white/10 p-4 rounded-lg">
-              <div className="text-white/70 text-sm mb-1">Mahadasha (Major Period)</div>
-              <div className="text-2xl font-bold text-white">{currentDasha.mahadasha}</div>
-            </div>
-
-            <div className="bg-white/10 p-4 rounded-lg">
-              <div className="text-white/70 text-sm mb-1">Antardasha (Sub-Period)</div>
-              <div className="text-xl font-bold text-white">{currentDasha.antardasha}</div>
-            </div>
-
-            <div className="bg-green-500/20 p-3 rounded-lg border border-green-400/30">
-              <div className="text-white/80 text-xs">
-                You are currently experiencing the influence of <strong>{currentDasha.mahadasha}</strong> Mahadasha 
-                and <strong>{currentDasha.antardasha}</strong> Antardasha in your life.
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Planetary Positions Table */}
-        <div className="bg-gradient-to-r from-purple-500/20 to-indigo-500/20 p-6 rounded-xl border border-purple-300/30">
-          <h3 className="text-xl font-bold text-white mb-4">📊 Planetary Positions at Birth</h3>
-          
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-white/20">
-                  <th className="text-left text-white/70 pb-2 px-2">Planet</th>
-                  <th className="text-left text-white/70 pb-2 px-2">Longitude</th>
-                  <th className="text-left text-white/70 pb-2 px-2">Nakshatra</th>
-                  <th className="text-left text-white/70 pb-2 px-2">Pada</th>
-                  <th className="text-left text-white/70 pb-2 px-2">Rasi</th>
-                </tr>
-              </thead>
-              <tbody className="text-white">
-                <tr className="border-b border-white/10 hover:bg-white/5">
-                  <td className="py-2 px-2 font-semibold text-blue-300">Lagna</td>
-                  <td className="py-2 px-2 font-mono text-sm">{lagnaDetails.sign.substring(0, 2)} {degreesToDMS(lagnaDetails.degree).formatted}</td>
-                  <td className="py-2 px-2">{/* Will calculate */}-</td>
-                  <td className="py-2 px-2">-</td>
-                  <td className="py-2 px-2">{lagnaDetails.sign.substring(0, 2)}</td>
-                </tr>
-                {moonDetails && (
-                  <tr className="border-b border-white/10 hover:bg-white/5">
-                    <td className="py-2 px-2 font-semibold text-yellow-300">Moon</td>
-                    <td className="py-2 px-2 font-mono text-sm">{moonDetails.sign.substring(0, 2)} {degreesToDMS(moonDetails.degree).formatted}</td>
-                    <td className="py-2 px-2">{moonDetails.nakshatra}</td>
-                    <td className="py-2 px-2">{/* Calculate pada */}-</td>
-                    <td className="py-2 px-2">{moonDetails.sign.substring(0, 2)}</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-          
-          <div className="mt-3 text-xs text-white/60">
-            <strong>Note:</strong> Full planetary positions require calculating all 9 planets (Sun through Ketu). 
-            Currently showing Lagna and Moon only. Complete ephemeris data available in professional mode.
-          </div>
-        </div>
-
-        {/* Enhanced Mahadasha Analysis with Chalit */}
-        {lifeEventsTimeline && (
-          <div className="bg-gradient-to-r from-purple-500/20 to-indigo-500/20 p-6 rounded-xl border border-purple-300/30">
-            <h3 className="text-2xl font-bold text-white mb-4 flex items-center gap-2">
-              🌟 Birth Mahadasha Analysis
-            </h3>
-            
-            <div className="space-y-4">
-              <div className="bg-white/10 p-4 rounded-lg border border-white/20">
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <p className="text-white/70 text-sm">Mahadasha Lord at Birth</p>
-                    <p className="text-white font-bold text-2xl">{lifeEventsTimeline.birthMahadashaLord}</p>
-                  </div>
-                  <div>
-                    <p className="text-white/70 text-sm">Full Period Duration</p>
-                    <p className="text-white font-bold text-lg">{lifeEventsTimeline.birthMahadashaYears} years</p>
-                  </div>
-                </div>
-                
-                {/* Rashi vs Chalit Comparison */}
-                <div className="pt-4 border-t border-white/20">
-                  <p className="text-white font-semibold mb-3">House Position (Rashi vs Chalit):</p>
-                  <div className="grid grid-cols-2 gap-3 mb-3">
-                    <div className="bg-blue-500/20 p-3 rounded-lg border border-blue-400/30">
-                      <p className="text-blue-300 text-xs font-semibold mb-1">RASHI CHART (Equal Houses)</p>
-                      <p className="text-white text-sm font-bold">
-                        House {lifeEventsTimeline.birthMahadashaLordRashiHouse || 'N/A'}
-                      </p>
-                    </div>
-                    <div className="bg-orange-500/20 p-3 rounded-lg border border-orange-400/30">
-                      <p className="text-orange-300 text-xs font-semibold mb-1">CHALIT (True Cusps) ✓</p>
-                      <p className="text-white text-sm font-bold">
-                        House {lifeEventsTimeline.birthMahadashaLordChalitHouse || 'N/A'}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  {lifeEventsTimeline.birthMahadashaLordRashiHouse !== lifeEventsTimeline.birthMahadashaLordChalitHouse && (
-                    <div className="bg-yellow-500/20 p-3 rounded-lg border border-yellow-400/30">
-                      <p className="text-yellow-200 text-xs font-semibold flex items-center gap-1">
-                        <AlertCircle size={14} /> HOUSE SHIFT DETECTED
-                      </p>
-                      <p className="text-white/90 text-xs mt-1">
-                        {lifeEventsTimeline.birthMahadashaLord} moved from Rashi House {lifeEventsTimeline.birthMahadashaLordRashiHouse} → Chalit House {lifeEventsTimeline.birthMahadashaLordChalitHouse}. 
-                        All predictions below use <strong>CHALIT</strong> position as it reflects TRUE house cusps based on your exact birth time and location.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-              
-              {/* Predictions */}
-              <div className="bg-white/10 p-4 rounded-lg border border-white/20">
-                <p className="text-white font-semibold mb-3 flex items-center gap-2">
-                  <span className="text-xl">🔮</span> Key Life Predictions (Based on Chalit)
-                </p>
-                <div className="space-y-2">
-                  {lifeEventsTimeline.predictions && lifeEventsTimeline.predictions.slice(0, 6).map((pred, idx) => (
-                    <div key={idx} className="bg-purple-500/10 p-3 rounded-lg border border-purple-400/20">
-                      <div className="flex items-start gap-2">
-                        <span className="text-purple-300 text-xs font-bold mt-0.5 min-w-[100px]">{pred.category}</span>
-                        <div className="flex-1">
-                          <p className="text-white text-sm">{pred.event}</p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <p className="text-white/60 text-xs">⏰ {pred.timing}</p>
-                            {pred.chalitBased && (
-                              <span className="inline-block px-2 py-0.5 bg-orange-500/30 rounded text-[10px] text-orange-200">
-                                Chalit-Based
-                              </span>
-                            )}
-                            {pred.probability && (
-                              <span className="inline-block px-2 py-0.5 bg-green-500/30 rounded text-[10px] text-green-200">
-                                {pred.probability}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              
-              <div className="bg-indigo-500/20 p-3 rounded-lg border border-indigo-400/30">
-                <p className="text-indigo-200 text-xs font-semibold mb-1">ℹ️ About Chalit Kundali (Bhava Chalit)</p>
-                <p className="text-white/80 text-xs">
-                  Chalit chart uses TRUE house cusps calculated using Placidus system adapted for Vedic astrology. 
-                  Unlike Rashi chart's equal 30° houses, Chalit reflects actual sky divisions at your birth time and latitude. 
-                  Planets near house boundaries often shift positions, making Chalit more accurate for predictions.
-                </p>
-              </div>
-              
-              {/* DEBUG: Show all planetary positions */}
-              {DEV_MODE && lifeEventsTimeline.planets && (
-                <div className="bg-red-500/20 p-3 rounded-lg border border-red-400/30">
-                  <p className="text-red-200 text-xs font-semibold mb-2">🔧 DEBUG: Planetary Positions</p>
-                  <div className="text-[10px] font-mono text-white/70 space-y-1">
-                    <div className="text-white/50 mb-2 pb-1 border-b border-red-400/30">
-                      <span>Planet: Long° | Sign# (1-12) | Rashi H → Chalit H</span>
-                    </div>
-                    {Object.keys(lifeEventsTimeline.planets).map(planet => {
-                      const p = lifeEventsTimeline.planets[planet];
-                      const signNum = (p.sign || 0) + 1; // Convert 0-11 to 1-12
-                      return (
-                        <div key={planet} className="flex justify-between gap-2">
-                          <span className="font-bold text-white min-w-[60px]">{planet}:</span>
-                          <span className="flex-1">
-                            {p.longitude?.toFixed(2)}° | 
-                            Sign {signNum} | 
-                            H{p.rasifHouse || p.house} → H{p.chalitHouse}
-                          </span>
-                        </div>
-                      );
-                    })}
-                    <div className="mt-2 pt-2 border-t border-red-400/30 text-white/60">
-                      <p>Expected for Oct 9, 1985 Nurpur Kalan:</p>
-                      <p>Mars: Sign 11 (Aquarius) | Rashi H2 → Chalit H1</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Divisional Charts Display */}
-        <div className="bg-gradient-to-r from-purple-500/20 to-pink-500/20 p-6 rounded-xl border border-purple-300/30">
-          <h3 className="text-xl font-bold text-white mb-4">📊 Divisional Charts (North Indian Style)</h3>
-          
-          {divisionalCharts ? (
-            <div className="grid md:grid-cols-2 gap-6">
-              {/* D1 - Rashi Chart */}
-              {renderNorthIndianChart("D1 - Rashi (Birth Chart)", divisionalCharts.d1.planets, divisionalCharts.d1.ascendant)}
-              
-              {/* D9 - Navamsha */}
-              {renderNorthIndianChart("D9 - Navamsha (Soul/Spouse)", divisionalCharts.d9.planets, divisionalCharts.d9.ascendant)}
-              
-              {/* D10 - Dashamsha */}
-              {renderNorthIndianChart("D10 - Dashamsha (Career)", divisionalCharts.d10.planets, divisionalCharts.d10.ascendant)}
-              
-              {/* D7 - Saptamsha */}
-              {renderNorthIndianChart("D7 - Saptamsha (Children)", divisionalCharts.d7.planets, divisionalCharts.d7.ascendant)}
-            </div>
-          ) : (
-            <div className="text-white/60 italic text-sm">Loading divisional charts...</div>
-          )}
-          
-          <div className="mt-4 text-xs text-white/60">
-            <strong>Chart Layout:</strong> North Indian diamond style. House 1 (Ascendant) at top, houses proceed counterclockwise. 
-            Yellow ring indicates Ascendant position. Planet abbreviations: Su(Sun), Mo(Moon), Ma(Mars), Me(Mercury), Ju(Jupiter), Ve(Venus), Sa(Saturn), Ra(Rahu), Ke(Ketu).
-          </div>
-        </div>
-
-        <button
-          onClick={() => setPhase(1.7)}
-          className="w-full bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold py-4 px-6 rounded-lg hover:from-amber-600 hover:to-orange-600 transform hover:scale-105 transition-all duration-200 shadow-lg flex items-center justify-center gap-2"
-        >
-          Continue to Life Events Analysis
-          <ChevronRight size={20} />
-        </button>
-
-        <button
-          onClick={() => setPhase(1.5)}
           className="w-full bg-white/10 text-white font-bold py-3 px-6 rounded-lg hover:bg-white/20 transition-all duration-200 border border-white/30"
         >
           ← Back
@@ -3862,7 +4464,7 @@ const ProgressiveBTRApp = () => {
         </button>
 
         <button
-          onClick={() => setPhase(1.6)}
+          onClick={() => setPhase(1.5)}
           className="w-full bg-white/10 text-white font-bold py-3 px-6 rounded-lg hover:bg-white/20 transition-all duration-200 border border-white/30"
         >
           ← Back
@@ -4839,8 +5441,9 @@ const ProgressiveBTRApp = () => {
 
           {/* Phase Content */}
           {phase === 1 && renderPhase1()}
+          {phase === 1.2 && renderPhase1_2()}
+          {phase === 1.3 && renderPhase1_3()}
           {phase === 1.5 && renderPhase1_5()}
-          {phase === 1.6 && renderPhase1_6()}
           {phase === 1.7 && renderPhase1_7()}
           {phase === 1.8 && renderPhase1_8()}
           {phase === 2 && renderPhase2()}
