@@ -5,11 +5,16 @@ const ProgressiveBTRApp = () => {
   // ====== DEVELOPMENT MODE CONFIGURATION ======
   // Set to false for production deployment (Vercel/Netlify)
   // Set to true for development in Claude or local testing
-  const DEV_MODE = false;
+  // ====== PRODUCTION MODE (for localhost:3000) ======
+  const DEV_MODE = false; // Clean UI without debug panels
   
   // Swiss Ephemeris API Configuration
-  const SWISSEPH_API_URL = process.env.REACT_APP_SWISSEPH_API_URL || 'http://localhost:5000/api';
-  const USE_SWISSEPH_API = process.env.REACT_APP_USE_SWISSEPH_API !== 'false';
+  // Backend runs on localhost:5000
+  const SWISSEPH_API_URL = 'http://localhost:5000/api';
+  const USE_SWISSEPH_API = true; // Use Swiss Ephemeris for accuracy
+  
+  console.log('🚀 Production Mode (localhost)');
+  console.log('📡 Swiss Ephemeris API:', SWISSEPH_API_URL);
   
   // ====== MOCK DATA FOR DEVELOPMENT ======
   const MOCK_LOCATIONS = [
@@ -276,6 +281,13 @@ const ProgressiveBTRApp = () => {
   // Final Result
   const [lockedTime, setLockedTime] = useState(null);
   const [processing, setProcessing] = useState(false);
+  const [scanProgress, setScanProgress] = useState({ 
+  current: 0, 
+  total: 0, 
+  message: '', 
+  batchNum: 0, 
+  totalBatches: 0 
+});
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   // ====== GEONAMES API INTEGRATION ======
@@ -299,7 +311,7 @@ const ProgressiveBTRApp = () => {
       setIsSearching(true);
       
       // Simulate network delay
-      setTimeout(() => {
+      setTimeout(async () => {
         const filtered = MOCK_LOCATIONS.filter(loc =>
           loc.name.toLowerCase().includes(query.toLowerCase()) ||
           loc.fullName.toLowerCase().includes(query.toLowerCase())
@@ -814,12 +826,17 @@ const ProgressiveBTRApp = () => {
     // Each pada is 1/4 of that = 3°20' (3.333...°)
     const nakshatraStart = nakIndex * (360 / 27);
     const degreeInNakshatra = moonLongitude - nakshatraStart;
-    const nakPada = Math.floor(degreeInNakshatra / (360 / 27 / 4)) + 1; // 1-based pada (1, 2, 3, 4)
+    const padaSize = (360 / 27) / 4; // 3.3333° per pada
+    let nakPada = Math.floor(degreeInNakshatra / padaSize) + 1;
+    
+    // Ensure pada is between 1-4 (handles edge cases)
+    nakPada = Math.max(1, Math.min(4, nakPada)); // 1-based pada (1, 2, 3, 4)
     
     return {
       nakshatra: nakshatras[nakIndex],
       nakshatraLord: nakLords[lordIndex],
       nakIndex: nakIndex,
+      pada: nakPada,
       nakPada: nakPada
     };
   };
@@ -1063,65 +1080,130 @@ const ProgressiveBTRApp = () => {
 
   // ====== LIFE EVENTS PREDICTION (CHART-BASED ANALYSIS) ======
   
-  const calculateAllPlanetPositions = (jd, ayanamsa) => {
+  const calculateAllPlanetPositions = async(jd, ayanamsa) => {
     // Calculate all 9 planets (7 physical + 2 nodes)
     const T = (jd - 2451545.0) / 36525.0;
     
-    // Sun (already have this)
+   // ========== USE SWISS EPHEMERIS FOR ACCURATE POSITIONS ==========
+let finalSunSidereal, finalMoonSidereal, finalMarsSidereal;
+let finalMercurySidereal, finalJupiterSidereal, finalVenusSidereal;
+let finalSaturnSidereal, finalRahuSidereal, finalKetuSidereal;
+
+if (USE_SWISSEPH_API) {
+  try {
+    console.log("🌟 Fetching planetary positions from Swiss Ephemeris...");
+    console.log("  JD:", jd.toFixed(6));
+    console.log("  Date:", birthDate, birthTime);
+    
+    const response = await fetch(`${SWISSEPH_API_URL}/planets`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jd: jd,
+        latitude: birthLat,
+        longitude: birthLon,
+        planets: ['sun', 'moon', 'mars', 'mercury', 'jupiter', 'venus', 'saturn', 'true_node'],
+        sidereal: true
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`API returned ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    console.log("✅ Received planetary positions from Swiss Ephemeris");
+    
+    finalSunSidereal = data.planets.sun;
+    finalMoonSidereal = data.planets.moon;
+    finalMarsSidereal = data.planets.mars;
+    finalMercurySidereal = data.planets.mercury;
+    finalJupiterSidereal = data.planets.jupiter;
+    finalVenusSidereal = data.planets.venus;
+    finalSaturnSidereal = data.planets.saturn;
+    finalRahuSidereal = data.planets.rahu;
+    finalKetuSidereal = data.planets.ketu;
+    
+    console.log("  Sun:", finalSunSidereal.toFixed(4), zodiac[Math.floor(finalSunSidereal/30)]);
+    console.log("  Moon:", finalMoonSidereal.toFixed(4), zodiac[Math.floor(finalMoonSidereal/30)]);
+    console.log("  Mars:", finalMarsSidereal.toFixed(4), zodiac[Math.floor(finalMarsSidereal/30)]);
+    console.log("  Mercury:", finalMercurySidereal.toFixed(4), zodiac[Math.floor(finalMercurySidereal/30)]);
+    console.log("  Jupiter:", finalJupiterSidereal.toFixed(4), zodiac[Math.floor(finalJupiterSidereal/30)]);
+    console.log("  Venus:", finalVenusSidereal.toFixed(4), zodiac[Math.floor(finalVenusSidereal/30)]);
+    console.log("  Saturn:", finalSaturnSidereal.toFixed(4), zodiac[Math.floor(finalSaturnSidereal/30)]);
+    
+  } catch (error) {
+    console.error("❌ Swiss Ephemeris API error:", error);
+    console.log("⚠️ Falling back to local formulas (less accurate)");
+    
+    // Fallback to local formulas
     const sunTropical = calculateSunPosition(jd);
-    const sunSidereal = tropicalToSidereal(sunTropical, ayanamsa);
+    finalSunSidereal = tropicalToSidereal(sunTropical, ayanamsa);
     
-    // Moon (already have this) 
     const moonTropical = calculateMoonPosition(jd);
-    const moonSidereal = tropicalToSidereal(moonTropical, ayanamsa);
+    finalMoonSidereal = tropicalToSidereal(moonTropical, ayanamsa);
     
-    // Mars
-    const marsL = 355.43299 + 19140.2993 * T;
-    const marsA = 19.373 + 0.001 * T;
-    const marsTropical = marsL + 1.916 * Math.sin((marsA * Math.PI / 180));
-    const marsSidereal = tropicalToSidereal(marsTropical, ayanamsa);
+    const marsTropical = calculateMarsPosition(jd);
+    finalMarsSidereal = tropicalToSidereal(marsTropical, ayanamsa);
     
-    // Mercury
-    const mercL = 252.25 + 149474 * T;
-    const mercA = 174.79 + 149474 * T;
-    const mercTropical = mercL + 23.44 * Math.sin((mercA * Math.PI / 180));
-    const mercSidereal = tropicalToSidereal(mercTropical, ayanamsa);
+    const mercuryTropical = calculateMercuryPosition(jd);
+    finalMercurySidereal = tropicalToSidereal(mercuryTropical, ayanamsa);
     
-    // Jupiter
-    const jupL = 34.35 + 3034.9 * T;
-    const jupA = 20.02 + 3034.9 * T;
-    const jupTropical = jupL + 5.55 * Math.sin((jupA * Math.PI / 180));
-    const jupSidereal = tropicalToSidereal(jupTropical, ayanamsa);
+    const jupiterTropical = calculateJupiterPosition(jd);
+    finalJupiterSidereal = tropicalToSidereal(jupiterTropical, ayanamsa);
     
-    // Venus
-    const venL = 181.98 + 58519 * T;
-    const venA = 212.60 + 58519 * T;
-    const venTropical = venL + 0.72 * Math.sin((venA * Math.PI / 180));
-    const venSidereal = tropicalToSidereal(venTropical, ayanamsa);
+    const venusTropical = calculateVenusPosition(jd);
+    finalVenusSidereal = tropicalToSidereal(venusTropical, ayanamsa);
     
-    // Saturn
-    const satL = 50.08 + 1222.1 * T;
-    const satA = 317.02 + 1222.1 * T;
-    const satTropical = satL + 6.41 * Math.sin((satA * Math.PI / 180));
-    const satSidereal = tropicalToSidereal(satTropical, ayanamsa);
+    const saturnTropical = calculateSaturnPosition(jd);
+    finalSaturnSidereal = tropicalToSidereal(saturnTropical, ayanamsa);
     
-    // Rahu (Mean North Node - retrograde)
-    const rahuTropical = 125.044555 - 1934.136185 * T;
-    const rahuSidereal = tropicalToSidereal(rahuTropical, ayanamsa);
-    
-    // Ketu (opposite of Rahu)
-    const ketuSidereal = (rahuSidereal + 180) % 360;
+    const { rahu, ketu } = calculateRahuKetu(jd);
+    finalRahuSidereal = tropicalToSidereal(rahu, ayanamsa);
+    finalKetuSidereal = tropicalToSidereal(ketu, ayanamsa);
+  }
+} else {
+  // Use local formulas
+  console.log("⚠️ Using local formulas (Swiss Ephemeris disabled)");
+  
+  const sunTropical = calculateSunPosition(jd);
+  finalSunSidereal = tropicalToSidereal(sunTropical, ayanamsa);
+  
+  const moonTropical = calculateMoonPosition(jd);
+  finalMoonSidereal = tropicalToSidereal(moonTropical, ayanamsa);
+  
+  const marsTropical = calculateMarsPosition(jd);
+  finalMarsSidereal = tropicalToSidereal(marsTropical, ayanamsa);
+  
+  const mercuryTropical = calculateMercuryPosition(jd);
+  finalMercurySidereal = tropicalToSidereal(mercuryTropical, ayanamsa);
+  
+  const jupiterTropical = calculateJupiterPosition(jd);
+  finalJupiterSidereal = tropicalToSidereal(jupiterTropical, ayanamsa);
+  
+  const venusTropical = calculateVenusPosition(jd);
+  finalVenusSidereal = tropicalToSidereal(venusTropical, ayanamsa);
+  
+  const saturnTropical = calculateSaturnPosition(jd);
+  finalSaturnSidereal = tropicalToSidereal(saturnTropical, ayanamsa);
+  
+  const { rahu, ketu } = calculateRahuKetu(jd);
+  finalRahuSidereal = tropicalToSidereal(rahu, ayanamsa);
+  finalKetuSidereal = tropicalToSidereal(ketu, ayanamsa);
+}
+// ========== END SWISS EPHEMERIS SECTION ==========
     
     return {
-      Sun: { longitude: sunSidereal, house: 0, sign: Math.floor(sunSidereal / 30) },
-      Moon: { longitude: moonSidereal, house: 0, sign: Math.floor(moonSidereal / 30) },
-      Mars: { longitude: marsSidereal, house: 0, sign: Math.floor(marsSidereal / 30) },
-      Mercury: { longitude: mercSidereal, house: 0, sign: Math.floor(mercSidereal / 30) },
-      Jupiter: { longitude: jupSidereal, house: 0, sign: Math.floor(jupSidereal / 30) },
-      Venus: { longitude: venSidereal, house: 0, sign: Math.floor(venSidereal / 30) },
-      Saturn: { longitude: satSidereal, house: 0, sign: Math.floor(satSidereal / 30) },
-      Rahu: { longitude: rahuSidereal, house: 0, sign: Math.floor(rahuSidereal / 30) },
-      Ketu: { longitude: ketuSidereal, house: 0, sign: Math.floor(ketuSidereal / 30) }
+      Sun: { longitude: finalSunSidereal, house: 0, sign: Math.floor(finalSunSidereal/ 30) },
+      Moon: { longitude: finalMoonSidereal, house: 0, sign: Math.floor(finalMoonSidereal/ 30) },
+      Mars: { longitude: finalMarsSidereal, house: 0, sign: Math.floor(finalMarsSidereal / 30) },
+      Mercury: { longitude: finalMercurySidereal, house: 0, sign: Math.floor(finalMercurySidereal / 30) },
+      Jupiter: { longitude: finalJupiterSidereal, house: 0, sign: Math.floor(finalJupiterSidereal / 30) },
+      Venus: { longitude: finalVenusSidereal, house: 0, sign: Math.floor(finalVenusSidereal/ 30) },
+      Saturn: { longitude: finalSaturnSidereal, house: 0, sign: Math.floor(finalSaturnSidereal / 30) },
+      Rahu: { longitude: finalRahuSidereal, house: 0, sign: Math.floor(finalRahuSidereal/ 30) },
+      Ketu: { longitude: finalKetuSidereal, house: 0, sign: Math.floor(finalKetuSidereal / 30) }
     };
   };
   
@@ -1428,6 +1510,7 @@ const ProgressiveBTRApp = () => {
     
     const nakshatraStart = nakIndex * nakshatraSpan;
     const degreeInNakshatra = moonLongitude - nakshatraStart;
+    const padaSize = (360 / 27) / 4; // 3.3333° per pada
     const fractionCompleted = degreeInNakshatra / nakshatraSpan;
     
     const birthMahadashaLord = dashaLords[lordIndex];
@@ -2123,86 +2206,73 @@ const ProgressiveBTRApp = () => {
   };
 
   const calculateDivisionalChart = (absoluteDeg, division) => {
-    const d1SignIndex = Math.floor(absoluteDeg / 30);
-    let signDeg = absoluteDeg % 30;
+  const d1SignIndex = Math.floor(absoluteDeg / 30);
+  let signDeg = absoluteDeg % 30;
+  
+  // Round to eliminate floating-point artifacts
+  signDeg = Math.round(signDeg * 10000) / 10000;
+  
+  const zodiac = ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", 
+                  "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"];
+  
+  // Check if D1 sign is odd (Aries, Gemini, Leo, Libra, Sag, Aquarius)
+  // In 0-indexed array: 0, 2, 4, 6, 8, 10
+  const isOddSign = d1SignIndex % 2 === 0;
+  
+  if (division === 7) {
+    // ========== D7 (SAPTAMSA) ==========
+    // Each sign divided into 7 parts (4.285714° each)
+    // Odd signs: count from same sign
+    // Even signs: count from 7th sign (6 signs ahead)
     
-    // Round to nearest 0.0001 degree to eliminate floating-point artifacts
-    // 19.9999590149 becomes 20.0000
-    signDeg = Math.round(signDeg * 10000) / 10000;
+    const partSize = 30.0 / 7; // 4.285714285714286°
+    const partIndex = Math.floor(signDeg / partSize); // 0-6
     
-    const partSize = 30.0 / division;
+    let startSignIndex;
+    if (isOddSign) {
+      startSignIndex = d1SignIndex; // Same sign
+    } else {
+      startSignIndex = (d1SignIndex + 6) % 12; // 7th sign
+    }
+    
+    const d7SignIndex = (startSignIndex + partIndex) % 12;
+    return zodiac[d7SignIndex];
+  }
+  
+  if (division === 9) {
+    // ========== D9 (NAVAMSA) ==========
+    const partSize = 30.0 / 9;
     const partIndex = Math.floor(signDeg / partSize);
+    const startIndex = (d1SignIndex * 9) % 12;
+    const d9SignIndex = (startIndex + partIndex) % 12;
+    return zodiac[d9SignIndex];
+  }
+  
+  if (division === 10) {
+    // ========== D10 (DASAMSA) ==========
+    // Each sign divided into 10 parts (3° each)
+    // Odd signs: count from same sign
+    // Even signs: count from 9th sign (8 signs ahead)
     
-    if (division === 9) {
-      const startIndex = (d1SignIndex * 9) % 12;
-      const result = zodiac[(startIndex + partIndex) % 12];
-      
-      // Debug logging for Kunda scan
-      if (absoluteDeg >= 260 && absoluteDeg <= 320) {  // Capricorn range
-        console.log(`  [D9] absoluteDeg=${absoluteDeg.toFixed(3)}, signIndex=${d1SignIndex}, signDeg=${signDeg.toFixed(10)}, partSize=${partSize.toFixed(10)}, division=${signDeg / partSize}, partIndex=${partIndex}, result=${result}`);
-      }
-      
-      return result;
+    const partSize = 30.0 / 10; // 3°
+    const partIndex = Math.floor(signDeg / partSize); // 0-9
+    
+    let startSignIndex;
+    if (isOddSign) {
+      startSignIndex = d1SignIndex; // Same sign
+    } else {
+      startSignIndex = (d1SignIndex + 8) % 12; // 9th sign
     }
     
-    if (division === 10) {
-      // D10 (Dashamsha) - AstroSage method (1-based indexing)
-      // Divide each sign into 10 equal parts of 3° each
-      // For ODD signs (Aries, Gemini, Leo, Libra, Sagittarius, Aquarius): Start from SAME sign
-      // For EVEN signs (Taurus, Cancer, Virgo, Scorpio, Capricorn, Pisces): Start from LEO (index 4)
-      // IMPORTANT: Use 1-based part numbering (part 1-10, not 0-9)
-      
-      const partNumber = partIndex + 1; // Convert 0-based to 1-based
-      
-      console.log(`📊 D10 Calculation Debug:`);
-      console.log(`  Absolute degree: ${absoluteDeg.toFixed(3)}°`);
-      console.log(`  D1 Sign: ${zodiac[d1SignIndex]} (index ${d1SignIndex})`);
-      console.log(`  Degree in sign: ${signDeg.toFixed(3)}°`);
-      console.log(`  Part number: ${partNumber} (1-based, each part = ${partSize}°)`);
-      
-      // Check if D1 sign is odd or even
-      const isOddSign = d1SignIndex % 2 === 0; // 0,2,4,6,8,10 = Odd signs
-      
-      let startSignIndex;
-      if (isOddSign) {
-        // For odd signs: Start from the same sign
-        startSignIndex = d1SignIndex;
-        console.log(`  Odd sign (${zodiac[d1SignIndex]}): Start from same sign`);
-      } else {
-        // For even signs: Start from Leo (index 4)
-        startSignIndex = 4; // Leo
-        console.log(`  Even sign (${zodiac[d1SignIndex]}): Start from Leo`);
-      }
-      
-      const resultIndex = (startSignIndex + partNumber) % 12; // Use 1-based partNumber
-      console.log(`  Final: ${zodiac[startSignIndex]} + part ${partNumber} = ${zodiac[resultIndex]}`);
-      
-      return zodiac[resultIndex];
-    }
-    
-    if (division === 7) {
-      const isOddSign = d1SignIndex % 2 === 0;
-      
-      // ASTROSAGE SPECIAL RULE: For degrees < 18°, use different calculation
-      // This is NOT standard Parasara but matches AstroSage's implementation
-      const useAlternateFormula = signDeg < 18.0;
-      
-      if (isOddSign) {
-        return zodiac[(d1SignIndex + partIndex - 1 + 12) % 12];
-      } else {
-        // For even signs
-        if (useAlternateFormula) {
-          // For degrees < 18°: use +5 offset
-          return zodiac[(d1SignIndex + 5 + partIndex) % 12];
-        } else {
-          // For degrees ≥ 18°: use +6 offset
-          return zodiac[(d1SignIndex + 6 + partIndex) % 12];
-        }
-      }
-    }
-    
-    return zodiac[partIndex % 12];
-  };
+    const d10SignIndex = (startSignIndex + partIndex) % 12;
+    return zodiac[d10SignIndex];
+  }
+  
+  // ... other divisions (D12, etc.) ...
+  
+  // Default fallback
+  return zodiac[d1SignIndex];
+};
 
   // ====== D60 SHASHTIAMSHA (60TH DIVISION) ======
   // Shows past life karma and karmic baggage for each planet
@@ -2400,7 +2470,7 @@ const ProgressiveBTRApp = () => {
 
   // ====== EVENT HANDLERS WITH OPTIMIZATION ======
 
-  const handleD1Calculate = () => {
+ const handleD1Calculate = async () => {
     if (!birthDate || !birthTime || !birthLat || !birthLon || !birthTz) {
       alert("Please fill all birth details including selecting a location from the dropdown");
       return;
@@ -2408,7 +2478,7 @@ const ProgressiveBTRApp = () => {
 
     setProcessing(true);
     
-    setTimeout(() => {
+    setTimeout(async () => {
       const [year, month, day] = birthDate.split('-').map(Number);
       
       // Parse time with seconds: HH:MM:SS or HH:MM
@@ -2571,58 +2641,123 @@ const ProgressiveBTRApp = () => {
       setMoonRashiSelection(moonInfo.sign);
       setJanmaNakshatraIndex(nakInfo.nakIndex); // Store for trinal Kunda matching
       
-      // Calculate Sun position
-      const sunTropical = calculateSunPosition(jd);
-      const sunSidereal = tropicalToSidereal(sunTropical, ayanamsa);
+  // ========== PLANETARY POSITIONS - SWISS EPHEMERIS ==========
+      console.log("🌟 Calculating planetary positions...");
+      console.log("  Using Swiss Ephemeris API:", USE_SWISSEPH_API);
+      console.log("  JD:", jd.toFixed(6));
       
-      // Calculate ALL planet positions
-      const marsTropical = calculateMarsPosition(jd);
-      const marsSidereal = tropicalToSidereal(marsTropical, ayanamsa);
+      let finalSunSidereal, finalMoonSidereal, finalMarsSidereal;
+      let finalMercurySidereal, finalJupiterSidereal, finalVenusSidereal;
+      let finalSaturnSidereal, finalRahuSidereal, finalKetuSidereal;
       
-      const mercuryTropical = calculateMercuryPosition(jd);
-      const mercurySidereal = tropicalToSidereal(mercuryTropical, ayanamsa);
-      
-      const jupiterTropical = calculateJupiterPosition(jd);
-      const jupiterSidereal = tropicalToSidereal(jupiterTropical, ayanamsa);
-      
-      const venusTropical = calculateVenusPosition(jd);
-      const venusSidereal = tropicalToSidereal(venusTropical, ayanamsa);
-      
-      const saturnTropical = calculateSaturnPosition(jd);
-      const saturnSidereal = tropicalToSidereal(saturnTropical, ayanamsa);
-      
-      const { rahu, ketu } = calculateRahuKetu(jd);
-      const rahuSidereal = tropicalToSidereal(rahu, ayanamsa);
-      const ketuSidereal = tropicalToSidereal(ketu, ayanamsa);
-      
-      // TEMPORARY: Override with Jagannath Hora exact values for Dec 18, 1984
-      // This verifies the rest of the system works correctly
-      // TODO: Replace with accurate ephemeris calculations
-      let finalSunSidereal = sunSidereal;
-      let finalMoonSidereal = moonSidereal;
-      let finalMarsSidereal = marsSidereal;
-      let finalMercurySidereal = mercurySidereal;
-      let finalJupiterSidereal = jupiterSidereal;
-      let finalVenusSidereal = venusSidereal;
-      let finalSaturnSidereal = saturnSidereal;
-      let finalRahuSidereal = rahuSidereal;
-      let finalKetuSidereal = ketuSidereal;
-      
-      // Check if this is the test date: Dec 18, 1984, ~10:04 AM
-      if (birthDate === "1984-12-18" && hours === 10 && minutes === 4) {
-        console.log("🎯 Using Jagannath Hora exact values for test date");
-        // From Jagannath Hora for Dec 18, 1984, 10:04:35 AM, Delhi
-        // Convert from sign notation to absolute degrees
-        finalSunSidereal = 242.8211;      // 2 Sg 49' 15.95"  = 240 + 2.8211
-        finalMoonSidereal = 186.4425;     // 6 Li 26' 33.07"  = 180 + 6.4425  
-        finalMarsSidereal = 300.9645;     // 0 Aq 57' 53.21"  = 300 + 0.9645
-        finalMercurySidereal = 234.5207;  // 24 Sc 31' 14.53" = 210 + 24.5207
-        finalJupiterSidereal = 264.6763;  // 24 Sg 40' 34.57" = 240 + 24.6763
-        finalVenusSidereal = 286.9529;    // 16 Cp 57' 10.24" = 270 + 16.9529
-        finalSaturnSidereal = 209.7106;   // 29 Li 42' 38.26" = 180 + 29.7106
-        finalRahuSidereal = 32.2516;      // 2 Ta 15' 05.57"  = 30 + 2.2516
-        finalKetuSidereal = 212.2516;     // 2 Sc 15' 05.57"  = 210 + 2.2516
+      if (USE_SWISSEPH_API) {
+        try {
+          console.log("📡 Fetching from Swiss Ephemeris API...");
+          
+          const response = await fetch(`${SWISSEPH_API_URL}/planets`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jd: jd,
+              latitude: birthLat,
+              longitude: birthLon,
+              planets: ['sun', 'moon', 'mars', 'mercury', 'jupiter', 'venus', 'saturn', 'true_node'],
+              sidereal: true
+            })
+          });
+          
+          if (!response.ok) {
+            throw new Error(`Swiss Ephemeris API error: ${response.status}`);
+          }
+          
+          const data = await response.json();
+          
+          console.log("✅ Swiss Ephemeris response received");
+          
+          // Use Swiss Ephemeris values
+          finalSunSidereal = data.planets.sun;
+          finalMoonSidereal = data.planets.moon;
+          finalMarsSidereal = data.planets.mars;
+          finalMercurySidereal = data.planets.mercury;
+          finalJupiterSidereal = data.planets.jupiter;
+          finalVenusSidereal = data.planets.venus;
+          finalSaturnSidereal = data.planets.saturn;
+          finalRahuSidereal = data.planets.rahu;
+          finalKetuSidereal = data.planets.ketu;
+                 
+          console.log("📊 Planetary Positions (Swiss Ephemeris):");
+          console.log("  Sun:", finalSunSidereal.toFixed(4), "°", zodiac[Math.floor(finalSunSidereal/30)]);
+          console.log("  Moon:", finalMoonSidereal.toFixed(4), "°", zodiac[Math.floor(finalMoonSidereal/30)]);
+          console.log("  Mars:", finalMarsSidereal.toFixed(4), "°", zodiac[Math.floor(finalMarsSidereal/30)]);
+          console.log("  Mercury:", finalMercurySidereal.toFixed(4), "°", zodiac[Math.floor(finalMercurySidereal/30)]);
+          console.log("  Jupiter:", finalJupiterSidereal.toFixed(4), "°", zodiac[Math.floor(finalJupiterSidereal/30)]);
+          console.log("  Venus:", finalVenusSidereal.toFixed(4), "°", zodiac[Math.floor(finalVenusSidereal/30)]);
+          console.log("  Saturn:", finalSaturnSidereal.toFixed(4), "°", zodiac[Math.floor(finalSaturnSidereal/30)]);
+          console.log("  Rahu:", finalRahuSidereal.toFixed(4), "°", zodiac[Math.floor(finalRahuSidereal/30)]);
+          console.log("  Ketu:", finalKetuSidereal.toFixed(4), "°", zodiac[Math.floor(finalKetuSidereal/30)]);
+          
+        } catch (error) {
+          console.error("❌ Swiss Ephemeris API failed:", error);
+          console.log("⚠️ Falling back to local formulas (less accurate)");
+          
+          // Fallback to local calculations
+          const sunTropical = calculateSunPosition(jd);
+          finalSunSidereal = tropicalToSidereal(sunTropical, ayanamsa);
+          
+          const moonTropical = calculateMoonPosition(jd);
+          finalMoonSidereal = tropicalToSidereal(moonTropical, ayanamsa);
+          moonSidereal = finalMoonSidereal;
+          
+          const marsTropical = calculateMarsPosition(jd);
+          finalMarsSidereal = tropicalToSidereal(marsTropical, ayanamsa);
+          
+          const mercuryTropical = calculateMercuryPosition(jd);
+          finalMercurySidereal = tropicalToSidereal(mercuryTropical, ayanamsa);
+          
+          const jupiterTropical = calculateJupiterPosition(jd);
+          finalJupiterSidereal = tropicalToSidereal(jupiterTropical, ayanamsa);
+          
+          const venusTropical = calculateVenusPosition(jd);
+          finalVenusSidereal = tropicalToSidereal(venusTropical, ayanamsa);
+          
+          const saturnTropical = calculateSaturnPosition(jd);
+          finalSaturnSidereal = tropicalToSidereal(saturnTropical, ayanamsa);
+          
+          const { rahu, ketu } = calculateRahuKetu(jd);
+          finalRahuSidereal = tropicalToSidereal(rahu, ayanamsa);
+          finalKetuSidereal = tropicalToSidereal(ketu, ayanamsa);
+        }
+      } else {
+        // Use local formulas
+        console.log("⚠️ Using local formulas (Swiss Ephemeris disabled)");
+        
+        const sunTropical = calculateSunPosition(jd);
+        finalSunSidereal = tropicalToSidereal(sunTropical, ayanamsa);
+        
+        const moonTropical = calculateMoonPosition(jd);
+        finalMoonSidereal = tropicalToSidereal(moonTropical, ayanamsa);
+        moonSidereal = finalMoonSidereal;
+        
+        const marsTropical = calculateMarsPosition(jd);
+        finalMarsSidereal = tropicalToSidereal(marsTropical, ayanamsa);
+        
+        const mercuryTropical = calculateMercuryPosition(jd);
+        finalMercurySidereal = tropicalToSidereal(mercuryTropical, ayanamsa);
+        
+        const jupiterTropical = calculateJupiterPosition(jd);
+        finalJupiterSidereal = tropicalToSidereal(jupiterTropical, ayanamsa);
+        
+        const venusTropical = calculateVenusPosition(jd);
+        finalVenusSidereal = tropicalToSidereal(venusTropical, ayanamsa);
+        
+        const saturnTropical = calculateSaturnPosition(jd);
+        finalSaturnSidereal = tropicalToSidereal(saturnTropical, ayanamsa);
+        
+        const { rahu, ketu } = calculateRahuKetu(jd);
+        finalRahuSidereal = tropicalToSidereal(rahu, ayanamsa);
+        finalKetuSidereal = tropicalToSidereal(ketu, ayanamsa);
       }
+      // ========== END PLANETARY POSITIONS ==========
       
       // Store all planets
       const planetsData = {
@@ -2637,28 +2772,14 @@ const ProgressiveBTRApp = () => {
         rahu: finalRahuSidereal,
         ketu: finalKetuSidereal
       };
-      
-      setAllPlanets(planetsData);
+  setAllPlanets(planetsData);
       
       // Calculate Karaka designations (AK, AmK, BK, MK, PiK, GK, DK)
       const karakas = calculateKarakas(planetsData);
       setKarakaDesignations(karakas);
-      
-      console.log('🌟 All Planets Calculated:');
-      console.log('  Sun:', sunSidereal, zodiac[Math.floor(sunSidereal / 30)], `| Degree in sign: ${(sunSidereal % 30).toFixed(4)}°`);
-      console.log('  Moon:', moonSidereal, zodiac[Math.floor(moonSidereal / 30)], `| Degree in sign: ${(moonSidereal % 30).toFixed(4)}°`);
-      console.log('  Mars:', marsSidereal, zodiac[Math.floor(marsSidereal / 30)], `| Degree in sign: ${(marsSidereal % 30).toFixed(4)}°`);
-      console.log('  Mercury:', mercurySidereal, zodiac[Math.floor(mercurySidereal / 30)], `| Degree in sign: ${(mercurySidereal % 30).toFixed(4)}°`);
-      console.log('  Jupiter:', jupiterSidereal, zodiac[Math.floor(jupiterSidereal / 30)], `| Degree in sign: ${(jupiterSidereal % 30).toFixed(4)}°`);
-      console.log('  Venus:', venusSidereal, zodiac[Math.floor(venusSidereal / 30)], `| Degree in sign: ${(venusSidereal % 30).toFixed(4)}°`);
-      console.log('  Saturn:', saturnSidereal, zodiac[Math.floor(saturnSidereal / 30)], `| Degree in sign: ${(saturnSidereal % 30).toFixed(4)}°`);
-      console.log('  Rahu:', rahuSidereal, zodiac[Math.floor(rahuSidereal / 30)]);
-      console.log('  Ketu:', ketuSidereal, zodiac[Math.floor(ketuSidereal / 30)]);
-      console.log('📊 Karaka Designations:', karakas);
-      console.log('  Expected: Saturn should be AK (highest degree in sign)');
-      
+                 
       // Calculate Special Lagnas
-      const specialLagnasInfo = calculateSpecialLagnas(jd, birthLat, birthLon, ascendantSidereal, sunSidereal);
+      const specialLagnasInfo = calculateSpecialLagnas(jd, birthLat, birthLon, ascendantSidereal, finalSunSidereal);
       setSpecialLagnas(specialLagnasInfo);
       
       // Calculate Divisional Charts for Display
@@ -2672,7 +2793,8 @@ const ProgressiveBTRApp = () => {
       // Auto-calculate D9, D10, D7 for initial suggestions
       const d9 = calculateDivisionalChart(ascendantSidereal, 9);
       const d10 = calculateDivisionalChart(ascendantSidereal, 10);
-      const d7 = calculateDivisionalChart(ascendantSidereal, 7);
+      const d7 = calculateDivisionalChart(ascendantSidereal, 7);      
+    
       
       setD9Selection(d9);
       setD10Selection(d10);
@@ -3030,201 +3152,236 @@ const ProgressiveBTRApp = () => {
         allMatches: 0
       };
       
-      for (let offset = -windowSeconds; offset <= windowSeconds; offset += stepSize) {
-        const testTotalSeconds = centerSeconds + offset;
-        
-        // Handle negative seconds and day boundaries
-        let testHours = Math.floor(testTotalSeconds / 3600);
-        let testMinutes = Math.floor((testTotalSeconds % 3600) / 60);
-        let testSecs = testTotalSeconds % 60;
-        
-        // Handle negative values
-        if (testSecs < 0) {
-          testSecs += 60;
-          testMinutes -= 1;
-        }
-        if (testMinutes < 0) {
-          testMinutes += 60;
-          testHours -= 1;
-        }
-        if (testHours < 0) {
-          testHours += 24;
-        }
-        
-        testHours = testHours % 24;
-        
-        debugInfo.total++;
-        
-        // Convert to UTC for calculations using the same timezone offset logic
-        const [year, month, day] = birthDate.split('-').map(Number);
-        
-        // Get UTC offset for the birth timezone
-        const tzOffsetMap = {
-          'Asia/Kolkata': 5.5,
-          'Australia/Adelaide': 9.5,
-          'Australia/Sydney': 10,
-          'Australia/Melbourne': 10,
-          'Australia/Brisbane': 10,
-          'Australia/Perth': 8,
-          'Australia/Canberra': 10,
-          'Australia/Hobart': 10,
-          'Australia/Darwin': 9.5,
-          'America/New_York': -5,
-          'Europe/London': 0,
-          'Asia/Tokyo': 9,
-          'Europe/Paris': 1
-        };
-        
-        // DST detection for Kunda Lock (same logic as handleD1Calculate)
-        let utcOffset = tzOffsetMap[birthTz] || 0;
-        
-        // Check if DST applies
-        const dstZones = {
-          'Australia/Adelaide': 1,
-          'Australia/Sydney': 1,
-          'Australia/Melbourne': 1,
-          'Australia/Canberra': 1,
-          'Australia/Hobart': 1,
-          'America/New_York': 1,
-          'Europe/London': 1,
-          'Europe/Paris': 1
-        };
-        
-        if (dstZones[birthTz]) {
-          // Southern Hemisphere DST (Australia): October to April
-          if (birthTz.startsWith('Australia/') && 
-              ['Adelaide', 'Sydney', 'Melbourne', 'Canberra', 'Hobart'].some(city => birthTz.includes(city))) {
-            if (month >= 10 || month <= 4) {
-              utcOffset += dstZones[birthTz];
-            }
-          }
-          // Northern Hemisphere DST (USA): March to November
-          else if (birthTz === 'America/New_York') {
-            if (month >= 3 && month <= 11) {
-              utcOffset += dstZones[birthTz];
-            }
-          }
-          // Northern Hemisphere DST (Europe): March to October
-          else if (birthTz.startsWith('Europe/')) {
-            if (month >= 3 && month <= 10) {
-              utcOffset += dstZones[birthTz];
-            }
-          }
-        }
-        
-        let utcHours = testHours - utcOffset;
-        let utcDay = day;
-        let utcMonth = month;
-        let utcYear = year;
-        
-        // Handle day boundary crossing
-        if (utcHours < 0) {
-          utcHours += 24;
-          utcDay -= 1;
-          if (utcDay < 1) {
-            utcMonth -= 1;
-            if (utcMonth < 1) {
-              utcMonth = 12;
-              utcYear -= 1;
-            }
-            const daysInPrevMonth = new Date(utcYear, utcMonth, 0).getDate();
-            utcDay = daysInPrevMonth;
-          }
-        } else if (utcHours >= 24) {
-          utcHours -= 24;
-          utcDay += 1;
-          const daysInMonth = new Date(utcYear, utcMonth, 0).getDate();
-          if (utcDay > daysInMonth) {
-            utcDay = 1;
-            utcMonth += 1;
-            if (utcMonth > 12) {
-              utcMonth = 1;
-              utcYear += 1;
-            }
-          }
-        }
-        
-        // Calculate for this time point
-        const jd = getJulianDay(utcYear, utcMonth, utcDay, utcHours, testMinutes, testSecs);
-        const epsilon = getObliquity(jd);
-        const lst = getLST(jd, birthLon);
-        const ascendantTropical = calculateAscendant(lst, birthLat, epsilon);
-        const ayanamsa = getLahiriAyanamsa(jd);
-        const ascendantSidereal = tropicalToSidereal(ascendantTropical, ayanamsa);
-        const lagnaInfo = getZodiacFromLongitude(ascendantSidereal);
+            // ========== BATCH SWISS EPHEMERIS KUNDA SCAN ==========
+console.log(`🔍 Kunda Scan: ${windowLabel}, Points: ${windowSeconds * 2 + 1}`);
 
-        const moonTropical = calculateMoonPosition(jd);
-        const moonSidereal = tropicalToSidereal(moonTropical, ayanamsa);
-        const moonInfo = getZodiacFromLongitude(moonSidereal);
+setScanProgress({
+  current: 0,
+  total: windowSeconds * 2 + 1,
+  message: 'Building time points...',
+  batchNum: 0,
+  totalBatches: 0
+});
+
+// Build all time points
+const timePoints = [];
+const [year, month, day] = birthDate.split('-').map(Number);
+
+const tzOffsetMap = {
+  'Asia/Kolkata': 5.5,
+  'Australia/Adelaide': 9.5,
+  'Australia/Sydney': 10,
+  'Australia/Melbourne': 10,
+  'Australia/Brisbane': 10,
+  'Australia/Perth': 8,
+  'Australia/Canberra': 10,
+  'Australia/Hobart': 10,
+  'Australia/Darwin': 9.5,
+  'America/New_York': -5,
+  'Europe/London': 0,
+  'Asia/Tokyo': 9,
+  'Europe/Paris': 1
+};
+
+let utcOffset = tzOffsetMap[birthTz] || 0;
+
+const dstZones = {
+  'Australia/Adelaide': 1,
+  'Australia/Sydney': 1,
+  'Australia/Melbourne': 1,
+  'Australia/Canberra': 1,
+  'Australia/Hobart': 1,
+  'America/New_York': 1,
+  'Europe/London': 1,
+  'Europe/Paris': 1
+};
+
+if (dstZones[birthTz]) {
+  if (birthTz.startsWith('Australia/') && 
+      ['Adelaide', 'Sydney', 'Melbourne', 'Canberra', 'Hobart'].some(city => birthTz.includes(city))) {
+    if (month >= 10 || month <= 4) utcOffset += dstZones[birthTz];
+  } else if (month >= 3 && month <= 11) {
+    utcOffset += dstZones[birthTz];
+  }
+}
+
+for (let offset = -windowSeconds; offset <= windowSeconds; offset++) {
+  const testTotalSeconds = centerSeconds + offset;
+  
+  let testHours = Math.floor(testTotalSeconds / 3600);
+  let testMinutes = Math.floor((testTotalSeconds % 3600) / 60);
+  let testSecs = testTotalSeconds % 60;
+  
+  if (testSecs < 0) { testSecs += 60; testMinutes -= 1; }
+  if (testMinutes < 0) { testMinutes += 60; testHours -= 1; }
+  if (testHours < 0) testHours += 24;
+  testHours = testHours % 24;
+  
+  let utcHours = testHours - utcOffset;
+  let utcDay = day, utcMonth = month, utcYear = year;
+  
+  if (utcHours < 0) {
+    utcHours += 24; utcDay -= 1;
+    if (utcDay < 1) {
+      utcMonth -= 1;
+      if (utcMonth < 1) { utcMonth = 12; utcYear -= 1; }
+      utcDay = new Date(utcYear, utcMonth, 0).getDate();
+    }
+  } else if (utcHours >= 24) {
+    utcHours -= 24; utcDay += 1;
+    const daysInMonth = new Date(utcYear, utcMonth, 0).getDate();
+    if (utcDay > daysInMonth) {
+      utcDay = 1; utcMonth += 1;
+      if (utcMonth > 12) { utcMonth = 1; utcYear += 1; }
+    }
+  }
+  
+  const jd = getJulianDay(utcYear, utcMonth, utcDay, utcHours, testMinutes, testSecs);
+  timePoints.push({ offset, testHours, testMinutes, testSecs, jd });
+}
+
+console.log(`✅ Built ${timePoints.length} time points`);
+
+// Split into batches
+const BATCH_SIZE = 100;
+const batches = [];
+for (let i = 0; i < timePoints.length; i += BATCH_SIZE) {
+  batches.push(timePoints.slice(i, i + BATCH_SIZE));
+}
+
+console.log(`📦 ${batches.length} batches (${BATCH_SIZE} points each)`);
+
+setScanProgress(prev => ({
+  ...prev,
+  totalBatches: batches.length
+}));
+
+// Determine tolerance
+let degreeTolerance, enforceDegreeTolerance = true;
+
+if (windowSeconds <= 3) {
+  // Very narrow scan (±3 seconds) - more forgiving for floating-point precision
+  degreeTolerance = 0.2;
+} else if (windowSeconds <= 10) {
+  degreeTolerance = 0.1;
+} else if (windowSeconds <= 300) {
+  degreeTolerance = 1.5;
+} else if (windowSeconds <= 600) {
+  degreeTolerance = 3.0;
+} else if (windowSeconds <= 1200) {
+  degreeTolerance = 6.0;
+} else {
+  degreeTolerance = 30.0;
+  enforceDegreeTolerance = false;
+  console.log(`Wide scan: D1 SIGN only`);
+}
+
+// Process batches
+let processedCount = 0;
+
+for (let batchNum = 0; batchNum < batches.length; batchNum++) {
+  const batch = batches[batchNum];
+  
+  setScanProgress({
+    current: processedCount,
+    total: timePoints.length,
+    message: `Batch ${batchNum + 1}/${batches.length}...`,
+    batchNum: batchNum + 1,
+    totalBatches: batches.length
+  });
+  
+  try {
+    const response = await fetch(`${SWISSEPH_API_URL}/planets-batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        times: batch.map(tp => ({ jd: tp.jd })),
+        latitude: birthLat,
+        longitude: birthLon,
+        planets: ['moon'],
+        sidereal: true
+      })
+    });
+    
+    if (!response.ok) throw new Error(`API error ${response.status}`);
+    
+    const data = await response.json();
+    console.log(`✅ Batch ${batchNum + 1}: ${data.processing_time_ms}ms`);
+    
+    data.results.forEach((result, idx) => {
+      const timePoint = batch[idx];
+      debugInfo.total++;
+      
+      if (!result.ascendant || !result.planets?.moon) return;
+      
+      const lagnaSidereal = result.ascendant;
+      const moonSidereal = result.planets.moon;
+      
+      const lagnaInfo = getZodiacFromLongitude(lagnaSidereal);
+      const moonInfo = getZodiacFromLongitude(moonSidereal);
+      
+      const d9 = calculateDivisionalChart(lagnaSidereal, 9);
+      const d10 = calculateDivisionalChart(lagnaSidereal, 10);
+      const d7 = calculateDivisionalChart(lagnaSidereal, 7);
+      
+      const d1SignMatches = lagnaInfo.sign === lagnaDetails.sign;
+      const degreeDifference = Math.abs(lagnaInfo.degree - lagnaDetails.degree);
+      const d1DegreeClose = degreeDifference < degreeTolerance;
+      
+      if (d1SignMatches && d1DegreeClose) debugInfo.d1Matches = (debugInfo.d1Matches || 0) + 1;
+      if (d9 === d9Selection) debugInfo.d9Matches++;
+      if (d10 === d10Selection) debugInfo.d10Matches++;
+      if (d7 === d7Selection) debugInfo.d7Matches++;
+      if (moonInfo.sign === moonRashiSelection) debugInfo.moonMatches++;
+      
+      const d1Matches = enforceDegreeTolerance
+        ? (d1SignMatches && d1DegreeClose)
+        : d1SignMatches;
+      
+      if (d1Matches &&
+          d9 === d9Selection &&
+          d10 === d10Selection &&
+          d7 === d7Selection &&
+          moonInfo.sign === moonRashiSelection) {
         
-        const lagnaDeg = ascendantSidereal;
-        const lagnaSignIndex = lagnaInfo.signIndex;
+        debugInfo.allMatches++;
         
-        const d9 = calculateDivisionalChart(lagnaDeg, 9);
-        const d10 = calculateDivisionalChart(lagnaDeg, 10);
-        const d7 = calculateDivisionalChart(lagnaDeg, 7);
+        const timeStr = `${String(timePoint.testHours).padStart(2, '0')}:${String(timePoint.testMinutes).padStart(2, '0')}:${String(Math.abs(timePoint.testSecs)).padStart(2, '0')}`;
         
-        // CRITICAL: Validate D1 Lagna consistency
-        // The Kunda Siddhanta should REFINE the time within seconds, not jump to a different ascendant!
-        const d1SignMatches = lagnaInfo.sign === lagnaDetails.sign;
-        const degreeDifference = Math.abs(lagnaInfo.degree - lagnaDetails.degree);
+        console.log(`✅ MATCH at ${timeStr}`);
         
-        // Adaptive tolerance based on window size
-        let degreeTolerance;
-        if (windowSeconds <= 10) {
-          degreeTolerance = 0.05;  // ±0.05° for ±3 seconds (very tight)
-        } else if (windowSeconds <= 300) {
-          degreeTolerance = 0.5;   // ±0.5° for ±5 minutes
-        } else if (windowSeconds <= 600) {
-          degreeTolerance = 1.0;   // ±1.0° for ±10 minutes
-        } else {
-          degreeTolerance = 2.0;   // ±2.0° for larger windows
-        }
-        
-        const d1DegreeClose = degreeDifference < degreeTolerance;
-        
-        // Track individual matches for debugging
-        if (d1SignMatches && d1DegreeClose) debugInfo.d1Matches = (debugInfo.d1Matches || 0) + 1;
-        if (d9 === d9Selection) debugInfo.d9Matches++;
-        if (d10 === d10Selection) debugInfo.d10Matches++;
-        if (d7 === d7Selection) debugInfo.d7Matches++;
-        if (moonInfo.sign === moonRashiSelection) debugInfo.moonMatches++;
-        
-        // STRICT VALIDATION: All conditions must match
-        // 1. D1 Lagna SIGN must match (prevents jumping to different ascendant)
-        // 2. D1 Lagna DEGREE must be close (prevents jumping hours away)
-        // 3. D9, D10, D7 must all match the selections
-        // 4. Moon Rashi must match
-        if (d1SignMatches &&           // Same D1 sign (e.g., Capricorn)
-            d1DegreeClose &&           // Similar D1 degree (e.g., 18° ± 2°, not 19.9°)
-            d9 === d9Selection && 
-            d10 === d10Selection && 
-            d7 === d7Selection && 
-            moonInfo.sign === moonRashiSelection) {
-          
-          debugInfo.allMatches++;
-          
-          const timeStr = `${String(testHours).padStart(2, '0')}:${String(testMinutes).padStart(2, '0')}:${String(Math.abs(testSecs)).padStart(2, '0')}`;
-          
-          console.log(`✅ MATCH FOUND at ${timeStr}:`);
-          console.log(`  D1: ${lagnaInfo.sign} ${lagnaInfo.degree.toFixed(3)}°`);
-          console.log(`  D1 target: ${lagnaDetails.sign} ${lagnaDetails.degree.toFixed(3)}°`);
-          console.log(`  Degree difference: ${degreeDifference.toFixed(3)}° (tolerance: ±${degreeTolerance}°)`);
-          console.log(`  D9: ${d9} (target: ${d9Selection})`);
-          console.log(`  D10: ${d10} (target: ${d10Selection})`);
-          console.log(`  D7: ${d7} (target: ${d7Selection})`);
-          console.log(`  Moon: ${moonInfo.sign} (target: ${moonRashiSelection})`);
-          
-          candidates.push({
-            time: timeStr,
-            offset: offset,
-            lagna: lagnaInfo,
-            moon: moonInfo,
-            d9, d10, d7,
-            degreeDiff: degreeDifference.toFixed(3) // Track how close the match is
-          });
-        }
+        candidates.push({
+          time: timeStr,
+          offset: timePoint.offset,
+          lagna: lagnaInfo,
+          moon: moonInfo,
+          d9, d10, d7,
+          degreeDiff: degreeDifference.toFixed(3)
+        });
       }
+    });
+    
+    processedCount += batch.length;
+    
+  } catch (error) {
+    console.error(`❌ Batch ${batchNum + 1} error:`, error);
+    setScanProgress(prev => ({
+      ...prev,
+      message: `Error in batch ${batchNum + 1}, continuing...`
+    }));
+    processedCount += batch.length;
+  }
+}
+
+setScanProgress({
+  current: timePoints.length,
+  total: timePoints.length,
+  message: 'Scan complete!',
+  batchNum: batches.length,
+  totalBatches: batches.length
+});
+
+console.log(`🎯 Complete! Found ${candidates.length} matches`);
       
       setProcessing(false);
       
@@ -3288,7 +3445,7 @@ const ProgressiveBTRApp = () => {
         });
         setNoMatchFound(true);
       }
-    }, 100);
+      }, 100);
   };
 
   // ====== RENDER FUNCTIONS ======
@@ -4057,7 +4214,7 @@ const ProgressiveBTRApp = () => {
         </button>
 
         <button
-          onClick={() => setPhase(1.2)}
+          onClick={() => setPhase(1.3)}
           className="w-full bg-white/10 text-white font-bold py-3 px-6 rounded-lg hover:bg-white/20 transition-all duration-200 border border-white/30"
         >
           ← Back
@@ -4197,7 +4354,7 @@ const ProgressiveBTRApp = () => {
         </button>
 
         <button
-          onClick={() => setPhase(1)}
+          onClick={() => setPhase(1.7)}
           className="w-full bg-white/10 text-white font-bold py-3 px-6 rounded-lg hover:bg-white/20 transition-all duration-200 border border-white/30"
         >
           ← Back
@@ -4456,7 +4613,7 @@ const ProgressiveBTRApp = () => {
         </div>
 
         <button
-          onClick={() => setPhase(1.8)}
+          onClick={() => setPhase(2)}
           className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold py-4 px-6 rounded-lg hover:from-purple-600 hover:to-pink-600 transform hover:scale-105 transition-all duration-200 shadow-lg flex items-center justify-center gap-2"
         >
           Continue to Moon Nakshatra Analysis
@@ -4464,7 +4621,7 @@ const ProgressiveBTRApp = () => {
         </button>
 
         <button
-          onClick={() => setPhase(1.5)}
+          onClick={() => setPhase(1.7)}
           className="w-full bg-white/10 text-white font-bold py-3 px-6 rounded-lg hover:bg-white/20 transition-all duration-200 border border-white/30"
         >
           ← Back
@@ -4586,7 +4743,7 @@ const ProgressiveBTRApp = () => {
         </button>
 
         <button
-          onClick={() => setPhase(1.7)}
+          onClick={() => setPhase(1.5)}
           className="w-full bg-white/10 text-white font-bold py-3 px-6 rounded-lg hover:bg-white/20 transition-all duration-200 border border-white/30"
         >
           ← Back
@@ -4976,6 +5133,51 @@ const ProgressiveBTRApp = () => {
               <p className="text-white/70 text-sm">Degree</p>
               <p className="font-bold text-lg">{moonDetails.degree.toFixed(2)}°</p>
             </div>
+          </div>
+        </div>
+      )}
+      {/* ========== BATCH SCAN PROGRESS INDICATOR ========== */}
+      {processing && scanProgress.total > 0 && (
+        <div className="bg-gradient-to-r from-blue-500/20 to-purple-500/20 p-5 rounded-xl border border-blue-400/40 mb-4 shadow-lg">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="relative">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-t-2 border-blue-400"></div>
+              <div className="absolute inset-0 animate-ping rounded-full h-6 w-6 border border-blue-400/30"></div>
+            </div>
+            <div className="flex-1">
+              <p className="text-blue-300 font-bold text-lg">{scanProgress.message}</p>
+              <p className="text-white/60 text-sm">
+                Batch {scanProgress.batchNum} of {scanProgress.totalBatches} • 
+                {' '}{scanProgress.current.toLocaleString()} / {scanProgress.total.toLocaleString()} points processed
+                {scanProgress.totalBatches > 0 && (
+                  <span className="ml-2 text-purple-300">
+                    ({Math.round((scanProgress.batchNum / scanProgress.totalBatches) * 100)}% complete)
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+          
+          {/* Progress Bar */}
+          <div className="w-full bg-gray-700/50 rounded-full h-3 overflow-hidden shadow-inner mb-2">
+            <div
+              className="bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 h-3 transition-all duration-300 ease-out relative"
+              style={{ width: `${(scanProgress.current / scanProgress.total) * 100}%` }}
+            >
+              <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
+            </div>
+          </div>
+          
+          {/* Additional Info */}
+          <div className="flex items-center justify-between text-xs">
+            <p className="text-white/50">
+              ⏱️ Using Swiss Ephemeris batch API for maximum accuracy
+            </p>
+            <p className="text-purple-300 font-mono">
+              {scanProgress.current > 0 && scanProgress.total > 0 && (
+                <>~{Math.round((scanProgress.total - scanProgress.current) / 100 * 3)} sec remaining</>
+              )}
+            </p>
           </div>
         </div>
       )}
